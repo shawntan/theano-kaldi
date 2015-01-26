@@ -1,3 +1,21 @@
+import config
+config.parser.description = "theano-kaldi script for fine-tuning DNN feed-forward models."
+config.parser.add_argument(
+		'--pretrain-file',
+		dest = 'pretrain_file',
+		type = str,
+		help = ".pkl file containing pre-trained model"
+	)
+config.parser.add_argument(
+		'--temporary-file',
+		dest = 'temporary_file',
+		type = str,
+		help = "Location to write intermediate models to."
+	)
+config.parse_args()
+
+
+
 import theano
 import theano.tensor as T
 
@@ -11,8 +29,8 @@ import model
 import cPickle as pickle
 
 if __name__ == "__main__":
-	frames_file = sys.argv[1]
-	labels_file = sys.argv[2]
+	frames_file = config.frames_file
+	labels_file = config.labels_file
 	
 	minibatch_size = 128
 
@@ -33,7 +51,7 @@ if __name__ == "__main__":
 	updates = [ (p, p - lr * g) for p,g in zip(parameters,gradients) ]
 	
 
-	X_shared = theano.shared(np.zeros((1,model.input_size),dtype=theano.config.floatX))
+	X_shared = theano.shared(np.zeros((1,config.input_size),dtype=theano.config.floatX))
 	Y_shared = theano.shared(np.zeros((1,),dtype=np.int32))
 
 	train = theano.function(
@@ -49,16 +67,16 @@ if __name__ == "__main__":
 			inputs = [X,Y],
 			outputs = [loss,T.mean(T.neq(T.argmax(probs,axis=1),Y))]
 		)
-
-	model.load('pretrain.pkl',params)
+	if config.args.pretrain_file != None:
+		model.load(config.args.pretrain_file,params)
 
 	learning_rate = 0.1
 	utt_count = sum(1 for _ in data_io.stream(frames_file,labels_file))
 	frame_count = sum(f.shape[0] for f,_ in data_io.stream(frames_file,labels_file))
 	#print frame_count
-	test_utt_count = int(math.ceil( 0.1 * utt_count))
+	test_utt_count = int(math.ceil( 0.05 * utt_count))
 	best_score = np.inf
-	for epoch in xrange(50):
+	for epoch in xrange(config.max_epochs):
 		stream = data_io.stream(frames_file,labels_file)
 		total_frames = 0
 		for f,l in data_io.randomise(stream,limit=utt_count - test_utt_count):
@@ -83,11 +101,12 @@ if __name__ == "__main__":
 		print total_errors/total_frames,cost
 		if cost < best_score:
 			best_score = cost
-			model.save('dnn.pkl',params)
+			model.save(config.args.temporary_file,params)
 		else:
 			learning_rate *= 0.5
-			model.load('dnn.pkl',params)
+			model.load(config.args.temporary_file,params)
 			if learning_rate < 0.001: break
 		print "Learning rate is now",learning_rate
 
-
+	model.load(config.args.temporary_file,params)
+	model.save(config.output_file,params)
