@@ -22,7 +22,7 @@ max_arcs=-1
 skip_scoring=false # whether to skip WER scoring
 scoring_opts=
 
-norm_vars=false  # when doing cmvn, whether to normalize variance; has to be consistent with build_nnet_pfile.sh
+norm_vars=false # when doing cmvn, whether to normalize variance; has to be consistent with build_nnet_pfile.sh
 
 ## End configuration section
 

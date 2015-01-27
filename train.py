@@ -25,7 +25,7 @@ import sys
 
 import data_io
 import model
-
+import updates
 import cPickle as pickle
 
 if __name__ == "__main__":
@@ -48,7 +48,6 @@ if __name__ == "__main__":
 
 	parameters = params.values()
 	gradients = T.grad(loss,wrt=parameters)
-	updates = [ (p, p - lr * g) for p,g in zip(parameters,gradients) ]
 	
 
 	X_shared = theano.shared(np.zeros((1,config.input_size),dtype=theano.config.floatX))
@@ -57,7 +56,7 @@ if __name__ == "__main__":
 	train = theano.function(
 			inputs  = [lr,idx],
 			outputs = loss,
-			updates = updates,
+			updates = updates.momentum(parameters,gradients,eps=lr),
 			givens  = {
 				X: X_shared[idx*minibatch_size:(idx+1)*minibatch_size],
 				Y: Y_shared[idx*minibatch_size:(idx+1)*minibatch_size]
@@ -70,7 +69,7 @@ if __name__ == "__main__":
 	if config.args.pretrain_file != None:
 		model.load(config.args.pretrain_file,params)
 
-	learning_rate = 0.1
+	learning_rate = 0.008
 	utt_count = sum(1 for _ in data_io.stream(frames_file,labels_file))
 	frame_count = sum(f.shape[0] for f,_ in data_io.stream(frames_file,labels_file))
 	#print frame_count
@@ -105,7 +104,7 @@ if __name__ == "__main__":
 		else:
 			learning_rate *= 0.5
 			model.load(config.args.temporary_file,params)
-			if learning_rate < 0.001: break
+			if learning_rate < 0.0001: break
 		print "Learning rate is now",learning_rate
 
 	model.load(config.args.temporary_file,params)

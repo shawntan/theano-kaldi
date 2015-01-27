@@ -21,6 +21,9 @@ def corrupt(x,corr=0.2):
 	return corr_x
 
 def reconstruct(corr_x,W,b,b_rec,input_layer):
+#	if input_layer:
+#		hidden = T.tanh(T.dot(corr_x,W) + b)
+#	else:
 	hidden = config.hidden_activation(T.dot(corr_x,W) + b)
 
 	recon  = T.dot(hidden,W.T) + b_rec
@@ -52,6 +55,7 @@ if __name__ == "__main__":
 	X_shared = theano.shared(np.zeros((1,config.input_size),dtype=theano.config.floatX))
 
 	layer_sizes = [config.input_size] + config.layer_sizes[:-1]
+
 	pretrain_functions = []
 	for i,layer in enumerate(layers[:-1]):
 		W = params["W_hidden_%d"%i]

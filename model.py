@@ -22,6 +22,7 @@ def build_feedforward(params):
 
 	prev_layer_size = input_size
 #	factor = 4 if config.hidden_activation == T.nnet.sigmoid else 1
+#	factor = 1
 	for i,curr_size in enumerate(layer_sizes):
 		W_name = "W_hidden_%d"%i 
 		b_name = "b_hidden_%d"%i
