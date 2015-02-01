@@ -8,7 +8,7 @@ splice_opts=`cat $dir/splice_opts 2>/dev/null` # frame-splicing options.
 
 num_pdfs=`gmm-info $gmmdir/final.mdl | grep pdfs | awk '{print $NF}'`
 
-structure="440:1024:1024:1024:1024:$num_pdfs"
+structure="440:1024:1024:1024:1024:1024:1024:$num_pdfs"
 
 
 mkdir -p $dir/pkl
@@ -25,12 +25,12 @@ data_dir=$dir/data/$set
 #
 #python2 theano-kaldi/picklise_lbl.py $ali_dir $set $dir/pkl/${set}_lbl.pklgz
 #
-#python theano-kaldi/pretrain.py \
-#	--frames-file $dir/pkl/train.pklgz \
-#	--labels-file $dir/pkl/train_lbl.pklgz \
-#	--structure $structure \
-#	--output-file $dir/pretrain.pkl \
-#	--minibatch 128 --max-epochs 5
+python theano-kaldi/pretrain_sda.py\
+	--frames-file $dir/pkl/train.pklgz \
+	--labels-file $dir/pkl/train_lbl.pklgz \
+	--structure $structure \
+	--output-file $dir/pretrain.pkl \
+	--minibatch 128 --max-epochs 20
 
 python theano-kaldi/train.py \
 	--frames-file $dir/pkl/train.pklgz \

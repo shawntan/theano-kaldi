@@ -5,11 +5,11 @@ import math
 import cPickle as pickle
 import config
 
-def initial_weights(input_size,output_size):
+def initial_weights(input_size,output_size,factor=4):
 	return np.asarray(
 		np.random.uniform(
-			low  = -np.sqrt(6. / (input_size + output_size)),
-			high =  np.sqrt(6. / (input_size + output_size)),
+			low  = -factor * np.sqrt(6. / (input_size + output_size)),
+			high =  factor * np.sqrt(6. / (input_size + output_size)),
 			size =  (input_size,output_size)
 		),
 		dtype=theano.config.floatX
@@ -26,7 +26,7 @@ def build_feedforward(params):
 	for i,curr_size in enumerate(layer_sizes):
 		W_name = "W_hidden_%d"%i 
 		b_name = "b_hidden_%d"%i
-		params[W_name] = theano.shared(initial_weights(prev_layer_size,curr_size),name=W_name)
+		params[W_name] = theano.shared(initial_weights(prev_layer_size,curr_size,factor=4 if i>0 else 0.1),name=W_name)
 		params[b_name] = theano.shared(np.zeros((curr_size,),dtype=theano.config.floatX),name=b_name)
 		prev_layer_size = curr_size
 	W_name = "W_output"

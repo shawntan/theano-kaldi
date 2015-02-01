@@ -69,7 +69,7 @@ if __name__ == "__main__":
 	if config.args.pretrain_file != None:
 		model.load(config.args.pretrain_file,params)
 
-	learning_rate = 0.008
+	learning_rate = 0.1
 	utt_count = sum(1 for _ in data_io.stream(frames_file,labels_file))
 	frame_count = sum(f.shape[0] for f,_ in data_io.stream(frames_file,labels_file))
 	#print frame_count
@@ -104,7 +104,7 @@ if __name__ == "__main__":
 		else:
 			learning_rate *= 0.5
 			model.load(config.args.temporary_file,params)
-			if learning_rate < 0.0001: break
+			if learning_rate < 0.00001: break
 		print "Learning rate is now",learning_rate
 
 	model.load(config.args.temporary_file,params)

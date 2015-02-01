@@ -17,7 +17,7 @@ def stream(frame_file,label_file):
 			pass
 
 
-def randomise(stream,buffer_size=4096,limit=-1):
+def randomise(stream,buffer_size=4096*10,limit=-1):
 	buf_feats = []
 	buf_labels = []
 	buf_instances = 0
