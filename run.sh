@@ -25,12 +25,12 @@ data_dir=$dir/data/$set
 #
 #python2 theano-kaldi/picklise_lbl.py $ali_dir $set $dir/pkl/${set}_lbl.pklgz
 #
-python theano-kaldi/pretrain_sda.py\
-	--frames-file $dir/pkl/train.pklgz \
-	--labels-file $dir/pkl/train_lbl.pklgz \
-	--structure $structure \
-	--output-file $dir/pretrain.pkl \
-	--minibatch 128 --max-epochs 20
+#python theano-kaldi/pretrain_sda.py\
+#	--frames-file $dir/pkl/train.pklgz \
+#	--labels-file $dir/pkl/train_lbl.pklgz \
+#	--structure $structure \
+#	--output-file $dir/pretrain.pkl \
+#	--minibatch 128 --max-epochs 20
 
 python theano-kaldi/train.py \
 	--frames-file $dir/pkl/train.pklgz \
@@ -39,7 +39,7 @@ python theano-kaldi/train.py \
 	--pretrain-file $dir/pretrain.pkl \
 	--temporary-file $dir/tmp.dnn.pkl \
 	--output-file $dir/dnn.pkl \
-	--minibatch 128 --max-epochs 100
+	--minibatch 256 --max-epochs 100
 
 theano-kaldi/decode_dnn.sh --nj 1 \
 	--scoring-opts "--min-lmwt 1 --max-lmwt 8" \

@@ -11,6 +11,7 @@ import sys
 
 import data_io
 import model
+import updates
 import cPickle as pickle
 
 theano_rng = T.shared_randomstreams.RandomStreams(np.random.RandomState(1234).randint(2**30))
@@ -78,9 +79,10 @@ if __name__ == "__main__":
 		train = theano.function(
 				inputs = [idx],
 				outputs = loss,
-				updates = [
-					(p, p - lr * g) for p,g in zip(parameters,gradients)
-				],
+				updates = updates.momentum(parameters,gradients,eps=lr),
+			#	 [
+			#		(p, p - lr * g) for p,g in zip(parameters,gradients)
+			#	],
 				givens  = {
 					X: X_shared[idx*minibatch_size:(idx+1)*minibatch_size],
 				}
