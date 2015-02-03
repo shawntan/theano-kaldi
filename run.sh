@@ -25,16 +25,28 @@ data_dir=$dir/data/$set
 #
 #python2 theano-kaldi/picklise_lbl.py $ali_dir $set $dir/pkl/${set}_lbl.pklgz
 #
+#python theano-kaldi/split_dataset.py \
+#	$dir/pkl/train.pklgz \
+#	$dir/pkl/train_lbl.pklgz  \
+#	0.05 \
+#	$dir/pkl/trn.train.pklgz \
+#	$dir/pkl/trn.train_lbl.pklgz \
+#	$dir/pkl/val.train.pklgz \
+#	$dir/pkl/val.train_lbl.pklgz 
+#
 #python theano-kaldi/pretrain_sda.py\
-#	--frames-file $dir/pkl/train.pklgz \
-#	--labels-file $dir/pkl/train_lbl.pklgz \
+#	--frames-file $dir/pkl/trn.train.pklgz \
+#	--labels-file $dir/pkl/trn.train_lbl.pklgz \
 #	--structure $structure \
 #	--output-file $dir/pretrain.pkl \
 #	--minibatch 128 --max-epochs 20
 
+
 python theano-kaldi/train.py \
-	--frames-file $dir/pkl/train.pklgz \
-	--labels-file $dir/pkl/train_lbl.pklgz \
+	--frames-file $dir/pkl/trn.train.pklgz \
+	--labels-file $dir/pkl/trn.train_lbl.pklgz \
+	--validation-frames-file $dir/pkl/val.train.pklgz \
+	--validation-labels-file $dir/pkl/val.train_lbl.pklgz \
 	--structure $structure \
 	--pretrain-file $dir/pretrain.pkl \
 	--temporary-file $dir/tmp.dnn.pkl \

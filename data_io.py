@@ -3,7 +3,7 @@ import cPickle as pickle
 import sys
 import numpy as np
 
-def stream(frame_file,label_file):
+def stream(frame_file,label_file,with_name=False):
 	with gzip.open(frame_file,'rb') as feat_file,\
 		 gzip.open(label_file,'rb') as lbls_file:
 		try:
@@ -12,7 +12,10 @@ def stream(frame_file,label_file):
 				name2,lbls  = pickle.load(lbls_file)
 				assert(name1==name2)
 				assert(feats.shape[0] == len(lbls))
-				yield feats,lbls
+				if with_name:
+					yield name1,feats,lbls
+				else:
+					yield feats,lbls
 		except EOFError:
 			pass
 

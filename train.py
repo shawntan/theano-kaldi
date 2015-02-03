@@ -1,6 +1,22 @@
 import config
 config.parser.description = "theano-kaldi script for fine-tuning DNN feed-forward models."
 config.parser.add_argument(
+		'--validation-frames-file',
+		dest = 'val_frames_file',
+		required = True,
+		type = str,
+		help = ".pklgz file containing pickled (name,frames) pairs for training"
+	)
+
+config.parser.add_argument(
+		'--validation-labels-file',
+		dest = 'val_labels_file',
+		required = True,
+		type = str,
+		help = ".pklgz file containing pickled (name,frames) pairs for training"
+	)
+
+config.parser.add_argument(
 		'--pretrain-file',
 		dest = 'pretrain_file',
 		type = str,
@@ -31,6 +47,8 @@ import cPickle as pickle
 if __name__ == "__main__":
 	frames_file = config.frames_file
 	labels_file = config.labels_file
+	val_frames_file = config.args.val_frames_file
+	val_labels_file = config.args.val_labels_file
 	
 	minibatch_size = 128
 
@@ -78,7 +96,7 @@ if __name__ == "__main__":
 	for epoch in xrange(config.max_epochs):
 		stream = data_io.stream(frames_file,labels_file)
 		total_frames = 0
-		for f,l in data_io.randomise(stream,limit=utt_count - test_utt_count):
+		for f,l in data_io.randomise(stream):
 			total_frames += f.shape[0]
 			X_shared.set_value(f)
 			Y_shared.set_value(l)
@@ -88,7 +106,7 @@ if __name__ == "__main__":
 		total_cost = 0
 		total_errors = 0
 		total_frames = 0
-		for f,l in stream:
+		for f,l in data_io.stream(val_frames_file,val_labels_file):
 			loss, errors = test(f,l)
 			total_frames += f.shape[0]
 
