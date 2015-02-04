@@ -50,7 +50,7 @@ if __name__ == "__main__":
 	val_frames_file = config.args.val_frames_file
 	val_labels_file = config.args.val_labels_file
 	
-	minibatch_size = 128
+	minibatch_size = config.minibatch
 
 	params = {}
 
