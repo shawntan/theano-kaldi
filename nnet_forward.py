@@ -2,6 +2,7 @@ import theano
 import theano.tensor as T
 import ark_io
 import numpy as np
+import model
 
 import cPickle as pickle
 
@@ -10,21 +11,12 @@ import sys
 def ark_stream():
 	return ark_io.parse(sys.stdin)
 
-def create_model(params,counts):
+def create_model(filename,counts,input_size,layer_sizes,output_size):
 	X = T.matrix('X')
-	prev_layer = X
-	
-	layer_idx = 0
-	while "W_hidden_%d"%layer_idx in params:
-		W = theano.shared(params["W_hidden_%d"%layer_idx])
-		b = theano.shared(params["b_hidden_%d"%layer_idx])
-		prev_layer = T.nnet.sigmoid(T.dot(prev_layer,W) + b)
-		layer_idx += 1
-	
-	W = theano.shared(params["W_output"])
-	b = theano.shared(params["b_output"])
-	output = T.nnet.softmax(T.dot(prev_layer,W) + b)
-
+	params = {}
+	predict = model.build_feedforward(params,input_size,layer_sizes,output_size)
+	model.load(filename,params)
+	_,output = predict(X)
 	f = theano.function(
 			inputs = [X],
 			outputs = T.log(output) - T.log(counts/T.sum(counts))
@@ -43,18 +35,20 @@ def print_ark(name,array):
 			print
 	
 if __name__ == "__main__":
-	model_file = sys.argv[1]
-	counts_file = sys.argv[2]
+	structure = map(int,sys.argv[1].split(':'))
+	model_file = sys.argv[2]
+	counts_file = sys.argv[3]
 	counts = None
 	predict = None
+
+	input_size = structure[0]
+	output_size = structure[-1]
+	layer_sizes = structure[1:-1]
 
 	with open(counts_file) as f:
 		row = f.next().strip().strip('[]').strip()
 		counts = np.array([ np.float32(v) for v in row.split() ])
-
-	with open(model_file) as f:
-		params = pickle.load(f)
-		predict = create_model(params,counts)
+	predict = create_model(model_file,counts,input_size,layer_sizes,output_size)
 		
 	if predict != None:
 		for name,frames in ark_stream():
