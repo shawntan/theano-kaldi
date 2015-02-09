@@ -15,31 +15,31 @@ mkdir -p $dir/pkl
 set=train
 
 data_dir=$dir/data/$set
-#time apply-cmvn \
-#	--norm-vars=$norm_vars \
-#	--utt2spk=ark:$data_dir/utt2spk \
-#	scp:$data_dir/cmvn.scp scp:$data_dir/feats.scp \
-#	ark:- | \
-#	splice-feats $splice_opts ark:- ark,t:-  | \
-#	python2 theano-kaldi/pickle_ark_stream.py $dir/pkl/$set.pklgz
-#
-#python2 theano-kaldi/picklise_lbl.py $ali_dir $set $dir/pkl/${set}_lbl.pklgz
-#
-#python theano-kaldi/split_dataset.py \
-#	$dir/pkl/train.pklgz \
-#	$dir/pkl/train_lbl.pklgz  \
-#	0.05 \
-#	$dir/pkl/trn.train.pklgz \
-#	$dir/pkl/trn.train_lbl.pklgz \
-#	$dir/pkl/val.train.pklgz \
-#	$dir/pkl/val.train_lbl.pklgz 
-#
-#python theano-kaldi/pretrain_sda.py\
-#	--frames-file $dir/pkl/trn.train.pklgz \
-#	--labels-file $dir/pkl/trn.train_lbl.pklgz \
-#	--structure $structure \
-#	--output-file $dir/pretrain.pkl \
-#	--minibatch 128 --max-epochs 20
+time apply-cmvn \
+	--norm-vars=$norm_vars \
+	--utt2spk=ark:$data_dir/utt2spk \
+	scp:$data_dir/cmvn.scp scp:$data_dir/feats.scp \
+	ark:- | \
+	splice-feats $splice_opts ark:- ark,t:-  | \
+	python2 theano-kaldi/pickle_ark_stream.py $dir/pkl/$set.pklgz
+
+python2 theano-kaldi/picklise_lbl.py $ali_dir $set $dir/pkl/${set}_lbl.pklgz
+
+python theano-kaldi/split_dataset.py \
+	$dir/pkl/train.pklgz \
+	$dir/pkl/train_lbl.pklgz  \
+	0.05 \
+	$dir/pkl/trn.train.pklgz \
+	$dir/pkl/trn.train_lbl.pklgz \
+	$dir/pkl/val.train.pklgz \
+	$dir/pkl/val.train_lbl.pklgz 
+
+python theano-kaldi/pretrain_sda.py\
+	--frames-file $dir/pkl/trn.train.pklgz \
+	--labels-file $dir/pkl/trn.train_lbl.pklgz \
+	--structure $structure \
+	--output-file $dir/pretrain.pkl \
+	--minibatch 128 --max-epochs 20
 
 
 python theano-kaldi/train.py \
