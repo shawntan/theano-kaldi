@@ -34,12 +34,12 @@ data_dir=$dir/data/$set
 #	$dir/pkl/val.train.pklgz \
 #	$dir/pkl/val.train_lbl.pklgz 
 #
-python theano-kaldi/pretrain_sda.py\
-	--frames-file $dir/pkl/trn.train.pklgz \
-	--labels-file $dir/pkl/trn.train_lbl.pklgz \
-	--structure $structure \
-	--output-file $dir/pretrain.pkl \
-	--minibatch 128 --max-epochs 20
+#python theano-kaldi/pretrain_sda.py\
+#	--frames-file $dir/pkl/trn.train.pklgz \
+#	--labels-file $dir/pkl/trn.train_lbl.pklgz \
+#	--structure $structure \
+#	--output-file $dir/pretrain.pkl \
+#	--minibatch 128 --max-epochs 20
 
 
 python theano-kaldi/train.py \

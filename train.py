@@ -58,7 +58,9 @@ if __name__ == "__main__":
 	
 	X = T.matrix('X')
 	Y = T.ivector('Y')
-	idx = T.iscalar('idx')
+
+	start_idx = T.iscalar('start_idx')
+	end_idx = T.iscalar('end_idx')
 	lr = T.scalar('lr')
 
 	_,probs = feedforward(X)
@@ -72,12 +74,12 @@ if __name__ == "__main__":
 	Y_shared = theano.shared(np.zeros((1,),dtype=np.int32))
 
 	train = theano.function(
-			inputs  = [lr,idx],
+			inputs  = [lr,start_idx,end_idx],
 			outputs = loss,
 			updates = updates.momentum(parameters,gradients,eps=lr),
 			givens  = {
-				X: X_shared[idx*minibatch_size:(idx+1)*minibatch_size],
-				Y: Y_shared[idx*minibatch_size:(idx+1)*minibatch_size]
+				X: X_shared[start_idx:end_idx],
+				Y: Y_shared[start_idx:end_idx]
 			}
 		)
 	test = theano.function(
@@ -96,12 +98,15 @@ if __name__ == "__main__":
 	for epoch in xrange(config.max_epochs):
 		stream = data_io.stream(frames_file,labels_file)
 		total_frames = 0
-		for f,l in data_io.randomise(stream):
+		for f,l,size in data_io.randomise(stream):
 			total_frames += f.shape[0]
 			X_shared.set_value(f)
 			Y_shared.set_value(l)
-			batch_count = int(math.ceil(f.shape[0]/float(minibatch_size)))
-			for idx in xrange(batch_count): train(learning_rate,idx)
+			batch_count = int(math.ceil(size/float(minibatch_size)))
+			for idx in xrange(batch_count):
+				start = idx*minibatch_size
+				end = min((idx+1)*minibatch_size,size)
+				train(learning_rate,start,end)
 		#print total_frames
 		total_cost = 0
 		total_errors = 0

@@ -20,34 +20,46 @@ def stream(frame_file,label_file,with_name=False):
 			pass
 
 
-def randomise(stream,buffer_size=4096*10,limit=-1):
-	buf_feats = []
-	buf_labels = []
+def randomise(stream,buffer_size=2**20,limit=-1):
+	buf_feats = None
+	buf_labels = None
 	buf_instances = 0
 	count = 0
-	for feats,lbls in stream:
-		if buf_instances + feats.shape[0] > buffer_size:
-			feat_batch,lbl_batch = np.vstack(buf_feats),np.hstack(buf_labels).astype(np.int32)
-			assert(feat_batch.shape[0] == lbl_batch.shape[0])
-			idxs = np.arange(feat_batch.shape[0])
-			np.random.shuffle(idxs)
-			yield feat_batch[idxs],lbl_batch[idxs]
-			buf_feats = []
-			buf_labels = []
-			buf_instances = 0
-		buf_feats.append(feats)
-		buf_labels.append(lbls)
-		buf_instances += feats.shape[0]
-		count += 1
-		if count == limit:
-			break
-	if len(buf_feats) > 0:
-		feat_batch,lbl_batch = np.vstack(buf_feats),np.hstack(buf_labels).astype(np.int32)
-		assert(feat_batch.shape[0] == lbl_batch.shape[0])
-		idxs = np.arange(feat_batch.shape[0])
-		np.random.shuffle(idxs)
-		yield feat_batch[idxs],lbl_batch[idxs]
 
+	for feats,lbls in stream:
+
+		if buf_feats == None:
+#			print "Initialise buffer",(buffer_size,feats.shape[1])
+			buf_feats  = np.zeros((buffer_size,feats.shape[1]),dtype=np.float32)
+			buf_labels = np.zeros((buffer_size,),dtype=np.int32)
+
+		if buf_instances + feats.shape[0] > buffer_size:
+#			print "Buffer size reached: ",buf_instances
+#			print "Shuffling...",
+			idxs = np.arange(buf_instances)
+			np.random.shuffle(idxs)
+			buf_feats[:buf_instances]  = buf_feats[idxs]
+			buf_labels[:buf_instances] = buf_labels[idxs]
+			yield buf_feats,buf_labels,buf_instances
+#			print "dispatched."
+			buf_instances = 0
+		else:
+			lbls = np.array(lbls,dtype=np.int32)
+			assert(feats.shape[0] == lbls.shape[0])
+#			print "Copying to buffer", (buf_instances,buf_instances+feats.shape[0])
+			buf_feats[buf_instances:buf_instances+feats.shape[0]]  = feats
+			buf_labels[buf_instances:buf_instances+feats.shape[0]] = lbls
+			buf_instances += feats.shape[0]
+
+			count += 1
+			if count == limit: break
+		
+	if len(buf_feats) > 0:
+		idxs = np.arange(buf_instances)
+		np.random.shuffle(idxs)
+		buf_feats[:buf_instances]  = buf_feats[idxs]
+		buf_labels[:buf_instances] = buf_labels[idxs]
+		yield buf_feats,buf_labels,buf_instances
 
 
 if __name__ == "__main__":

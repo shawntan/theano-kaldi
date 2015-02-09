@@ -49,7 +49,8 @@ if __name__ == "__main__":
 	feedforward = model.build_feedforward(params)
 	
 	X = T.matrix('X')
-	idx = T.iscalar('idx')
+	start_idx = T.iscalar('start_idx')
+	end_idx = T.iscalar('end_idx')
 
 	layers,_ = feedforward(X)
 	
@@ -77,14 +78,14 @@ if __name__ == "__main__":
 		parameters = [W,b,b_rec]
 		gradients  = T.grad(loss,wrt=parameters)
 		train = theano.function(
-				inputs = [idx],
+				inputs = [start_idx,end_idx],
 				outputs = loss,
 				updates = updates.momentum(parameters,gradients,eps=lr),
 			#	 [
 			#		(p, p - lr * g) for p,g in zip(parameters,gradients)
 			#	],
 				givens  = {
-					X: X_shared[idx*minibatch_size:(idx+1)*minibatch_size],
+					X: X_shared[start_idx:end_idx],
 				}
 			)
 		pretrain_functions.append(train)
@@ -93,14 +94,16 @@ if __name__ == "__main__":
 		print "Pretraining layer",layer_idx,"..."
 		for epoch in xrange(config.max_epochs):	
 			stream = data_io.stream(frames_file,labels_file)
-			
 			total_count = 0
 			total_loss  = 0
-			for f,_ in data_io.randomise(stream):
+			for f,_,size in data_io.randomise(stream):
 				X_shared.set_value(f)
-				batch_count = int(math.ceil(f.shape[0]/float(minibatch_size)))
+				batch_count = int(math.ceil(size/float(minibatch_size)))
 				for idx in xrange(batch_count):
-					total_loss += train(idx)
+					start = idx*minibatch_size
+					end = min((idx+1)*minibatch_size,size)
+#					print "Training:",(start,end)
+					total_loss += train(start,end)
 					total_count += 1
 			print total_loss/total_count
 	model.save(config.output_file,params)
