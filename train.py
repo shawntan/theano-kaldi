@@ -90,11 +90,8 @@ if __name__ == "__main__":
 		model.load(config.args.pretrain_file,params)
 
 	learning_rate = 0.1
-	utt_count = sum(1 for _ in data_io.stream(frames_file,labels_file))
-	frame_count = sum(f.shape[0] for f,_ in data_io.stream(frames_file,labels_file))
-	#print frame_count
-	test_utt_count = int(math.ceil( 0.05 * utt_count))
 	best_score = np.inf
+
 	for epoch in xrange(config.max_epochs):
 		stream = data_io.stream(frames_file,labels_file)
 		total_frames = 0
