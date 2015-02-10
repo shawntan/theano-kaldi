@@ -1,4 +1,5 @@
 #!/bin/bash
+TK_DIR=$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )
 gmmdir=exp/tri3
 dir=exp/dnn_fbank_tk_feedforward
 ali_dir=${gmmdir}_ali
@@ -33,9 +34,9 @@ echo \
 #	| add-deltas --delta-order=$(cat $dir/delta_order) ark:- ark:- \
 #	| splice-feats $splice_opts ark:- ark:- \
 #	| nnet-forward $dir/feature_transform ark:- ark,t:-  \
-#	| python2 theano-kaldi/pickle_ark_stream.py $dir/pkl/train.pklgz $dir/input_dim
+#	| python2 $TK_DIR/pickle_ark_stream.py $dir/pkl/train.pklgz $dir/input_dim
 
-#python2 theano-kaldi/picklise_lbl.py $ali_dir $dir/pkl/train_lbl.pklgz
+#python2 $TK_DIR/picklise_lbl.py $ali_dir $dir/pkl/train_lbl.pklgz
 
 
 num_pdfs=`gmm-info $gmmdir/final.mdl | grep pdfs | awk '{print $NF}'`
@@ -43,7 +44,7 @@ structure="$(cat $dir/input_dim):1024:1024:1024:1024:1024:1024:$num_pdfs"
 echo $structure > $dir/structure
 #structure=$(cat $dir/structure)
 
-#python theano-kaldi/split_dataset.py \
+#python $TK_DIR/split_dataset.py \
 #	$dir/pkl/train.pklgz \
 #	$dir/pkl/train_lbl.pklgz  \
 #	0.05 \
@@ -52,7 +53,7 @@ echo $structure > $dir/structure
 #	$dir/pkl/val.train.pklgz \
 #	$dir/pkl/val.train_lbl.pklgz 
 
-python theano-kaldi/pretrain_sda.py\
+python $TK_DIR/pretrain_sda.py\
 	--frames-file $dir/pkl/trn.train.pklgz \
 	--labels-file $dir/pkl/trn.train_lbl.pklgz \
 	--structure $structure \
@@ -60,7 +61,7 @@ python theano-kaldi/pretrain_sda.py\
 	--minibatch 128 --max-epochs 20
 
 
-python theano-kaldi/train.py \
+python $TK_DIR/train.py \
 	--frames-file $dir/pkl/trn.train.pklgz \
 	--labels-file $dir/pkl/trn.train_lbl.pklgz \
 	--validation-frames-file $dir/pkl/val.train.pklgz \
@@ -71,7 +72,7 @@ python theano-kaldi/train.py \
 	--output-file $dir/dnn.pkl \
 	--minibatch 256 --max-epochs 100
 
-theano-kaldi/decode_dnn.sh --nj 1 \
+$TK_DIR/decode_dnn.sh --nj 1 \
 	--scoring-opts "--min-lmwt 1 --max-lmwt 8" \
 	--norm-vars true \
 	$gmmdir/graph $dir/data/test \
