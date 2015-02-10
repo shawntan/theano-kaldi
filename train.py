@@ -63,69 +63,78 @@ if __name__ == "__main__":
 	end_idx = T.iscalar('end_idx')
 	lr = T.scalar('lr')
 
-	_,probs = feedforward(X)
-	loss = T.mean(T.nnet.categorical_crossentropy(probs,Y))
-
-	parameters = params.values()
-	gradients = T.grad(loss,wrt=parameters)
-	
-
+	_, outputs = feedforward(X)
 	X_shared = theano.shared(np.zeros((1,config.input_size),dtype=theano.config.floatX))
 	Y_shared = theano.shared(np.zeros((1,),dtype=np.int32))
 
-	train = theano.function(
-			inputs  = [lr,start_idx,end_idx],
-			outputs = loss,
-			updates = updates.momentum(parameters,gradients,eps=lr),
-			givens  = {
-				X: X_shared[start_idx:end_idx],
-				Y: Y_shared[start_idx:end_idx]
-			}
-		)
-	test = theano.function(
-			inputs = [X,Y],
-			outputs = [loss,T.mean(T.neq(T.argmax(probs,axis=1),Y))]
-		)
+	train_functions = []
+	test_functions = []
+	for layer_no,probs in enumerate(outputs):
+		loss = T.mean(T.nnet.categorical_crossentropy(probs,Y))
+		parameters = [params["W_output_%d"%layer_no],params["b_output_%d"%layer_no]]
+		if layer_no > 0:
+			parameters += [params["W_hidden_%d"%(layer_no-1)],params["b_hidden_%d"%(layer_no-1)]]
+		print parameters
+		gradients = T.grad(loss,wrt=parameters)
+
+		train = theano.function(
+				inputs  = [lr,start_idx,end_idx],
+				outputs = loss,
+				updates = updates.momentum(parameters,gradients,eps=lr),
+				givens  = {
+					X: X_shared[start_idx:end_idx],
+					Y: Y_shared[start_idx:end_idx]
+				}
+			)
+		test = theano.function(
+				inputs = [X,Y],
+				outputs = [loss,T.mean(T.neq(T.argmax(probs,axis=1),Y))]
+			)
+
+		train_functions.append(train)
+		test_functions.append(test)
+
 	if config.args.pretrain_file != None:
 		model.load(config.args.pretrain_file,params)
+	
+	for layer_no,(train,test) in enumerate(zip(train_functions,test_functions)):
+		print "Training layer %d..."%layer_no
+		learning_rate = 0.08
+		best_score = np.inf
+		for epoch in xrange(config.max_epochs):
+			stream = data_io.stream(frames_file,labels_file)
+			total_frames = 0
+			for f,l,size in data_io.randomise(stream):
+				total_frames += f.shape[0]
+				X_shared.set_value(f)
+				Y_shared.set_value(l)
+				batch_count = int(math.ceil(size/float(minibatch_size)))
+				for idx in xrange(batch_count):
+					start = idx*minibatch_size
+					end = min((idx+1)*minibatch_size,size)
+					train(learning_rate,start,end)
+			#print total_frames
+			total_cost = 0
+			total_errors = 0
+			total_frames = 0
+			for f,l in data_io.stream(val_frames_file,val_labels_file):
+				loss, errors = test(f,l)
+				total_frames += f.shape[0]
 
-	learning_rate = 0.1
-	best_score = np.inf
+				total_cost   += f.shape[0] * loss
+				total_errors += f.shape[0] * errors
 
-	for epoch in xrange(config.max_epochs):
-		stream = data_io.stream(frames_file,labels_file)
-		total_frames = 0
-		for f,l,size in data_io.randomise(stream):
-			total_frames += f.shape[0]
-			X_shared.set_value(f)
-			Y_shared.set_value(l)
-			batch_count = int(math.ceil(size/float(minibatch_size)))
-			for idx in xrange(batch_count):
-				start = idx*minibatch_size
-				end = min((idx+1)*minibatch_size,size)
-				train(learning_rate,start,end)
-		#print total_frames
-		total_cost = 0
-		total_errors = 0
-		total_frames = 0
-		for f,l in data_io.stream(val_frames_file,val_labels_file):
-			loss, errors = test(f,l)
-			total_frames += f.shape[0]
+			cost = total_cost/total_frames
 
-			total_cost   += f.shape[0] * loss
-			total_errors += f.shape[0] * errors
-
-		cost = total_cost/total_frames
-
-		print total_errors/total_frames,cost
-		if cost < best_score:
-			best_score = cost
-			model.save(config.args.temporary_file,params)
-		else:
-			learning_rate *= 0.5
-			model.load(config.args.temporary_file,params)
-			if learning_rate < 0.00001: break
-		print "Learning rate is now",learning_rate
+			print total_errors/total_frames,cost
+			if cost < best_score:
+				best_score = cost
+				model.save(config.args.temporary_file,params)
+			else:
+				learning_rate *= 0.5
+				model.load(config.args.temporary_file,params)
+				if learning_rate < 0.001: break
+			print "Learning rate is now",learning_rate
 
 	model.load(config.args.temporary_file,params)
 	model.save(config.output_file,params)

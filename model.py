@@ -21,30 +21,44 @@ def build_feedforward(params,input_size=None,layer_sizes=None,output_size=None):
 	output_size = output_size or config.output_size
 
 	prev_layer_size = input_size
-#	factor = 4 if config.hidden_activation == T.nnet.sigmoid else 1
-#	factor = 1
 	for i,curr_size in enumerate(layer_sizes):
-		W_name = "W_hidden_%d"%i 
-		b_name = "b_hidden_%d"%i
-		params[W_name] = theano.shared(initial_weights(prev_layer_size,curr_size,factor=4 if i>0 else 0.1),name=W_name)
-		params[b_name] = theano.shared(np.zeros((curr_size,),dtype=theano.config.floatX),name=b_name)
+		W_name        = "W_hidden_%d"%i 
+		b_name        = "b_hidden_%d"%i
+		W_output_name = "W_output_%d"%i 
+		b_name        = "b_output_%d"%i
+		params[W_name]        = theano.shared(initial_weights(prev_layer_size,curr_size,factor=4 if i>0 else 0.1),name=W_name)
+		params[b_name]        = theano.shared(np.zeros((curr_size,),dtype=theano.config.floatX),name=b_name)
+		params[W_output_name] = theano.shared(np.zeros((prev_layer_size,output_size),dtype=theano.config.floatX),name=W_name)
+		params[b_name]        = theano.shared(np.zeros((output_size,),dtype=theano.config.floatX),name=b_name)
 		prev_layer_size = curr_size
-	W_name = "W_output"
-	b_name = "b_output"
-	params[W_name] = theano.shared(np.zeros((layer_sizes[-1],output_size),dtype=theano.config.floatX),name=W_name)
+	W_output_name = "W_output_%d"%len(layer_sizes)
+	b_name        = "b_output_%d"%len(layer_sizes)
+	params[W_output_name] = theano.shared(np.zeros((prev_layer_size,output_size),dtype=theano.config.floatX),name=W_name)
 	params[b_name] = theano.shared(np.zeros((output_size,),dtype=theano.config.floatX),name=b_name)
-
 	def feedforward(X):
 		hidden_layers = [X]
-		for i in xrange(len(layer_sizes)):
-			layer = config.hidden_activation(
-				T.dot(hidden_layers[-1],params["W_hidden_%d"%i]) +\
-				params["b_hidden_%d"%i]
-			)
-			layer.name = "hidden_%d"%i
-			hidden_layers.append(layer)
-		output = T.nnet.softmax(T.dot(hidden_layers[-1],params["W_output"]) + params["b_output"])
-		return hidden_layers,output
+		output_layers = []
+
+		for i in xrange(len(layer_sizes)+1):
+
+			output = output_layers[-1] if output_layers else 0 +\
+					T.dot(hidden_layers[-1],params["W_output_%d"%i]) +\
+					params["b_output_%d"%i]
+			output.name = "lin_output_%d"%i
+			output_layers.append(output)
+
+			if i < len(layer_sizes):
+				hidden = config.hidden_activation(
+						T.dot(hidden_layers[-1],params["W_hidden_%d"%i]) +\
+						params["b_hidden_%d"%i]
+					)
+				hidden.name = "hidden_%d"%i
+				hidden_layers.append(layer)
+
+		for i in xrange(len(output_layers)): output_layers[i] = T.nnet.softmax(output_layers[i])
+
+		return hidden_layers,output_layers
+
 	return feedforward
 
 def load(filename,params):
