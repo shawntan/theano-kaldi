@@ -1,38 +1,56 @@
 #!/bin/bash
 gmmdir=exp/tri3
-dir=exp_pdnn/dnn_fbank_connect_all
+dir=exp/dnn_fbank_tk_feedforward
 ali_dir=${gmmdir}_ali
 norm_vars=true # when doing cmvn, whether to normalize variance; has to be consistent with build_nnet_pfile.sh
 
+echo "--left-context=5 --right-context=5" > $dir/splice_opts
 splice_opts=`cat $dir/splice_opts 2>/dev/null` # frame-splicing options.
+echo 2 > $dir/delta_order
+
+
+mkdir -p $dir
+mkdir -p $dir/data
+echo \
+"--use-energy=true
+--num-mel-bins=40" > conf/fbank.conf
+#for set in train dev test
+#do
+#	cp -r data/$set $dir/data/$set
+#	rm -rf $dir/data/$set/{cmvn,feats}.scp $dir/data/$set/split*
+#	steps/make_fbank.sh --fbank-config conf/fbank.conf --cmd "run.pl" --nj 10 $dir/data/$set $dir/_log $dir/_fbank || exit 1;
+##	steps/compute_cmvn_stats.sh                $dir/data/$set $dir/_log $dir/_fbank || exit 1;
+#done
+
+#copy-feats scp:$dir/data/train/feats.scp ark:- \
+#	| add-deltas --delta-order=$(cat $dir/delta_order) ark:- ark:- \
+#	| splice-feats $splice_opts ark:- ark:- \
+#	| compute-cmvn-stats ark:- - \
+#	| cmvn-to-nnet --binary=false - $dir/feature_transform 
+#
+#mkdir -p $dir/pkl
+#time copy-feats scp:$dir/data/train/feats.scp ark:- \
+#	| add-deltas --delta-order=$(cat $dir/delta_order) ark:- ark:- \
+#	| splice-feats $splice_opts ark:- ark:- \
+#	| nnet-forward $dir/feature_transform ark:- ark,t:-  \
+#	| python2 theano-kaldi/pickle_ark_stream.py $dir/pkl/train.pklgz $dir/input_dim
+
+#python2 theano-kaldi/picklise_lbl.py $ali_dir $dir/pkl/train_lbl.pklgz
+
 
 num_pdfs=`gmm-info $gmmdir/final.mdl | grep pdfs | awk '{print $NF}'`
+structure="$(cat $dir/input_dim):1024:1024:1024:1024:1024:1024:$num_pdfs"
+echo $structure > $dir/structure
+#structure=$(cat $dir/structure)
 
-structure="440:1024:1024:1024:1024:1024:1024:$num_pdfs"
-echo $structure > structure
-mkdir -p $dir
-mkdir -p $dir/pkl
-set=train
-
-data_dir=$dir/data/$set
-time apply-cmvn \
-	--norm-vars=$norm_vars \
-	--utt2spk=ark:$data_dir/utt2spk \
-	scp:$data_dir/cmvn.scp scp:$data_dir/feats.scp \
-	ark:- | \
-	splice-feats $splice_opts ark:- ark,t:-  | \
-	python2 theano-kaldi/pickle_ark_stream.py $dir/pkl/$set.pklgz
-
-python2 theano-kaldi/picklise_lbl.py $ali_dir $set $dir/pkl/${set}_lbl.pklgz
-
-python theano-kaldi/split_dataset.py \
-	$dir/pkl/train.pklgz \
-	$dir/pkl/train_lbl.pklgz  \
-	0.05 \
-	$dir/pkl/trn.train.pklgz \
-	$dir/pkl/trn.train_lbl.pklgz \
-	$dir/pkl/val.train.pklgz \
-	$dir/pkl/val.train_lbl.pklgz 
+#python theano-kaldi/split_dataset.py \
+#	$dir/pkl/train.pklgz \
+#	$dir/pkl/train_lbl.pklgz  \
+#	0.05 \
+#	$dir/pkl/trn.train.pklgz \
+#	$dir/pkl/trn.train_lbl.pklgz \
+#	$dir/pkl/val.train.pklgz \
+#	$dir/pkl/val.train_lbl.pklgz 
 
 python theano-kaldi/pretrain_sda.py\
 	--frames-file $dir/pkl/trn.train.pklgz \

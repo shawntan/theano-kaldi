@@ -20,7 +20,7 @@ def stream(frame_file,label_file,with_name=False):
 			pass
 
 
-def randomise(stream,buffer_size=2**20,limit=-1):
+def randomise(stream,buffer_size=2**16,limit=-1):
 	buf_feats = None
 	buf_labels = None
 	buf_instances = 0
@@ -66,8 +66,4 @@ if __name__ == "__main__":
 	for f,l in randomise(sys.argv[1],sys.argv[2]):
 		print f.shape
 		print l.shape
-
-
-
-
 
