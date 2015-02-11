@@ -76,11 +76,15 @@ $cmd $dir/log/class_count.log \
 
 ## Set up the features
 echo "$0: feature: splice(${splice_opts}) norm_vars(${norm_vars})"
+feats="copy-feats scp:$sdata/JOB/feats.scp ark:- \
+	| add-deltas --delta-order=$(cat $dir/../delta_order) ark:- ark:- \
+	| splice-feats $splice_opts ark:- ark:- \
+	| nnet-forward $dir/../feature_transform ark:- ark,t:-"
 
-feats="apply-cmvn --norm-vars=$norm_vars --utt2spk=ark:$sdata/JOB/utt2spk scp:$sdata/JOB/cmvn.scp scp:$sdata/JOB/feats.scp ark:- | splice-feats $splice_opts ark:- ark,t:- |"
+#feats="apply-cmvn --norm-vars=$norm_vars --utt2spk=ark:$sdata/JOB/utt2spk scp:$sdata/JOB/cmvn.scp scp:$sdata/JOB/feats.scp ark:- | splice-feats $splice_opts ark:- ark,t:- |"
 ##
 #finalfeats="$feats nnet-forward --class-frame-counts=$dir/class.counts --apply-log=true --no-softmax=false $srcdir/dnn.nnet ark:- ark:- |"
-finalfeats="ark,s,cs:$feats python2 theano-kaldi/nnet_forward.py $(cat $dir/../structure) $srcdir/dnn.pkl $dir/class.counts |"
+finalfeats="ark,s,cs:$feats | python2 theano-kaldi/nnet_forward.py $(cat $dir/../structure) $srcdir/dnn.pkl $dir/class.counts |"
 $cmd JOB=1:$nj $dir/log/decode.JOB.log \
   latgen-faster-mapped --max-active=$max_active --beam=$beam --lattice-beam=$latbeam --acoustic-scale=$acwt --allow-partial=true --word-symbol-table=$graphdir/words.txt $alidir/final.mdl $graphdir/HCLG.fst "$finalfeats" "ark:|gzip -c > $dir/lat.JOB.gz"
 
