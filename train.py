@@ -55,7 +55,7 @@ if __name__ == "__main__":
 	params = {}
 
 	feedforward = model.build_feedforward(params)
-	
+	print params	
 	X = T.matrix('X')
 	Y = T.ivector('Y')
 
@@ -74,6 +74,7 @@ if __name__ == "__main__":
 		parameters = [params["W_output_%d"%layer_no],params["b_output_%d"%layer_no]]
 		if layer_no > 0:
 			parameters += [params["W_hidden_%d"%(layer_no-1)],params["b_hidden_%d"%(layer_no-1)]]
+		print "Parameters to tune:"
 		print parameters
 		gradients = T.grad(loss,wrt=parameters)
 
@@ -99,7 +100,7 @@ if __name__ == "__main__":
 	
 	for layer_no,(train,test) in enumerate(zip(train_functions,test_functions)):
 		print "Training layer %d..."%layer_no
-		learning_rate = 0.08
+		learning_rate = 0.008
 		best_score = np.inf
 		for epoch in xrange(config.max_epochs):
 			stream = data_io.stream(frames_file,labels_file)
@@ -133,7 +134,7 @@ if __name__ == "__main__":
 			else:
 				learning_rate *= 0.5
 				model.load(config.args.temporary_file,params)
-				if learning_rate < 0.001: break
+				if learning_rate < 0.0001: break
 			print "Learning rate is now",learning_rate
 
 	model.load(config.args.temporary_file,params)

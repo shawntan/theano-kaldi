@@ -11,15 +11,15 @@ import sys
 def ark_stream():
 	return ark_io.parse(sys.stdin)
 
-def create_model(filename,counts,input_size,layer_sizes,output_size):
+def create_model(filename,counts,input_size,layer_sizes,output_size,output_layer=-1):
 	X = T.matrix('X')
 	params = {}
 	predict = model.build_feedforward(params,input_size,layer_sizes,output_size)
 	model.load(filename,params)
-	_,output = predict(X)
+	_,outputs = predict(X)
 	f = theano.function(
 			inputs = [X],
-			outputs = T.log(output) - T.log(counts/T.sum(counts))
+			outputs = T.log(outputs[output_layer]) - T.log(counts/T.sum(counts))
 		)
 	return f
 
@@ -38,6 +38,7 @@ if __name__ == "__main__":
 	structure = map(int,sys.argv[1].split(':'))
 	model_file = sys.argv[2]
 	counts_file = sys.argv[3]
+	output = int(sys.argv[4])
 	counts = None
 	predict = None
 
@@ -48,7 +49,7 @@ if __name__ == "__main__":
 	with open(counts_file) as f:
 		row = f.next().strip().strip('[]').strip()
 		counts = np.array([ np.float32(v) for v in row.split() ])
-	predict = create_model(model_file,counts,input_size,layer_sizes,output_size)
+	predict = create_model(model_file,counts,input_size,layer_sizes,output_size,output_layer=output)
 		
 	if predict != None:
 		for name,frames in ark_stream():

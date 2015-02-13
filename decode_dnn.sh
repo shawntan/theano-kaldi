@@ -31,7 +31,7 @@ echo "$0 $@"  # Print the command line for logging
 [ -f ./path.sh ] && . ./path.sh; # source the path.
 . parse_options.sh || exit 1;
 
-if [ $# != 4 ]; then
+if [ $# != 5 ]; then
    echo "Wrong #arguments ($#, expected 4)"
    echo "Usage: steps/decode_dnn.sh [options] <graph-dir> <data-dir> <ali-dir> <decode-dir>"
    echo " e.g.: steps/decode_dnn.sh exp/tri4/graph data/test exp/tri4_ali exp/tri4_dnn/decode"
@@ -50,6 +50,7 @@ graphdir=$1
 data=$2
 alidir=$3
 dir=`echo $4 | sed 's:/$::g'` # remove any trailing slash.
+output_layer=$5
 
 srcdir=`dirname $dir`; # assume model directory one level up from decoding directory.
 sdata=$data/split$nj;
@@ -77,10 +78,15 @@ $cmd $dir/log/class_count.log \
 ## Set up the features
 echo "$0: feature: splice(${splice_opts}) norm_vars(${norm_vars})"
 
-feats="apply-cmvn --norm-vars=$norm_vars --utt2spk=ark:$sdata/JOB/utt2spk scp:$sdata/JOB/cmvn.scp scp:$sdata/JOB/feats.scp ark:- | splice-feats $splice_opts ark:- ark,t:- |"
+feats="copy-feats scp:$sdata/JOB/feats.scp ark:- \
+	| add-deltas --delta-order=$(cat $dir/../delta_order) ark:- ark:- \
+	| splice-feats $splice_opts ark:- ark:- \
+	| nnet-forward $dir/../feature_transform ark:- ark,t:-"
+
+#feats="apply-cmvn --norm-vars=$norm_vars --utt2spk=ark:$sdata/JOB/utt2spk scp:$sdata/JOB/cmvn.scp scp:$sdata/JOB/feats.scp ark:- | splice-feats $splice_opts ark:- ark,t:- |"
 ##
 #finalfeats="$feats nnet-forward --class-frame-counts=$dir/class.counts --apply-log=true --no-softmax=false $srcdir/dnn.nnet ark:- ark:- |"
-finalfeats="ark,s,cs:$feats python2 theano-kaldi/nnet_forward.py $(cat $dir/../structure) $srcdir/dnn.pkl $dir/class.counts |"
+finalfeats="ark,s,cs:$feats | python2 theano-kaldi-2/nnet_forward.py $(cat $dir/../structure) $srcdir/dnn.pkl $dir/class.counts $output_layer |"
 $cmd JOB=1:$nj $dir/log/decode.JOB.log \
   latgen-faster-mapped --max-active=$max_active --beam=$beam --lattice-beam=$latbeam --acoustic-scale=$acwt --allow-partial=true --word-symbol-table=$graphdir/words.txt $alidir/final.mdl $graphdir/HCLG.fst "$finalfeats" "ark:|gzip -c > $dir/lat.JOB.gz"
 

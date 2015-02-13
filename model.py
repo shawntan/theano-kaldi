@@ -25,25 +25,27 @@ def build_feedforward(params,input_size=None,layer_sizes=None,output_size=None):
 		W_name        = "W_hidden_%d"%i 
 		b_name        = "b_hidden_%d"%i
 		W_output_name = "W_output_%d"%i 
-		b_name        = "b_output_%d"%i
+		b_output_name = "b_output_%d"%i
 		params[W_name]        = theano.shared(initial_weights(prev_layer_size,curr_size,factor=4 if i>0 else 0.1),name=W_name)
 		params[b_name]        = theano.shared(np.zeros((curr_size,),dtype=theano.config.floatX),name=b_name)
-		params[W_output_name] = theano.shared(np.zeros((prev_layer_size,output_size),dtype=theano.config.floatX),name=W_name)
-		params[b_name]        = theano.shared(np.zeros((output_size,),dtype=theano.config.floatX),name=b_name)
+		params[W_output_name] = theano.shared(np.zeros((prev_layer_size,output_size),dtype=theano.config.floatX),name=W_output_name)
+		params[b_output_name] = theano.shared(np.zeros((output_size,),dtype=theano.config.floatX),name=b_output_name)
 		prev_layer_size = curr_size
 	W_output_name = "W_output_%d"%len(layer_sizes)
-	b_name        = "b_output_%d"%len(layer_sizes)
-	params[W_output_name] = theano.shared(np.zeros((prev_layer_size,output_size),dtype=theano.config.floatX),name=W_name)
-	params[b_name] = theano.shared(np.zeros((output_size,),dtype=theano.config.floatX),name=b_name)
+	b_output_name = "b_output_%d"%len(layer_sizes)
+	params[W_output_name] = theano.shared(np.zeros((prev_layer_size,output_size),dtype=theano.config.floatX),name=W_output_name)
+	params[b_output_name] = theano.shared(np.zeros((output_size,),dtype=theano.config.floatX),name=b_output_name)
 	def feedforward(X):
 		hidden_layers = [X]
 		output_layers = []
 
 		for i in xrange(len(layer_sizes)+1):
-
-			output = output_layers[-1] if output_layers else 0 +\
-					T.dot(hidden_layers[-1],params["W_output_%d"%i]) +\
-					params["b_output_%d"%i]
+			if len(output_layers) > 0:
+				output = output_layers[-1]
+			else:
+				output = 0
+			output += T.dot(hidden_layers[-1],params["W_output_%d"%i]) +\
+						params["b_output_%d"%i]
 			output.name = "lin_output_%d"%i
 			output_layers.append(output)
 
@@ -53,7 +55,7 @@ def build_feedforward(params,input_size=None,layer_sizes=None,output_size=None):
 						params["b_hidden_%d"%i]
 					)
 				hidden.name = "hidden_%d"%i
-				hidden_layers.append(layer)
+				hidden_layers.append(hidden)
 
 		for i in xrange(len(output_layers)): output_layers[i] = T.nnet.softmax(output_layers[i])
 
@@ -64,7 +66,8 @@ def build_feedforward(params,input_size=None,layer_sizes=None,output_size=None):
 def load(filename,params):
 	with open(filename,'rb') as f:
 		for k,v in pickle.load(f).iteritems():
-			params[k].set_value(v)
+			if k in params:
+				params[k].set_value(v)
 
 def save(filename,params):
 	with open(filename,'wb') as f:
