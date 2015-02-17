@@ -44,8 +44,7 @@ def build_feedforward(params,input_size=None,layer_sizes=None,output_size=None):
 				output = output_layers[-1]
 			else:
 				output = 0
-			output += T.dot(hidden_layers[-1],params["W_output_%d"%i]) +\
-						params["b_output_%d"%i]
+			output += T.dot(hidden_layers[-1],params["W_output_%d"%i])
 			output.name = "lin_output_%d"%i
 			output_layers.append(output)
 
@@ -57,7 +56,7 @@ def build_feedforward(params,input_size=None,layer_sizes=None,output_size=None):
 				hidden.name = "hidden_%d"%i
 				hidden_layers.append(hidden)
 
-		for i in xrange(len(output_layers)): output_layers[i] = T.nnet.softmax(output_layers[i])
+		for i in xrange(len(output_layers)): output_layers[i] = T.nnet.softmax(output_layers[i] + params["b_output_%d"%i])
 
 		return hidden_layers,output_layers
 

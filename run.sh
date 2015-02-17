@@ -81,18 +81,19 @@ python $TK_DIR/train_fine.py \
 	--labels-file $dir/pkl/trn.train_lbl.pklgz \
 	--validation-frames-file $dir/pkl/val.train.pklgz \
 	--validation-labels-file $dir/pkl/val.train_lbl.pklgz \
-	--pretrain-file $orig_dir/dnn.pkl \
+	--pretrain-file $orig_dir/pretrain.pkl \
 	--structure $structure \
 	--temporary-file $dir/tmp.dnn.pkl \
 	--output-file $dir/dnn.pkl \
-	--minibatch 256 --max-epochs 100
+	--minibatch 128 --max-epochs 100
 
 
-for output_layer in {0..6}
-do
+#for output_layer in {0..6}
+#do
+output_layer=6
 	$TK_DIR/decode_dnn.sh --nj 1 \
 		--scoring-opts "--min-lmwt 1 --max-lmwt 8" \
 		--norm-vars true \
 		$gmmdir/graph $dir/data/test \
 		${gmmdir}_ali $dir/decode_test_$output_layer $output_layer
-done
+#done
