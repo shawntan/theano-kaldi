@@ -119,7 +119,7 @@ if __name__ == "__main__":
 		total_cost   += f.shape[0] * loss
 		total_errors += f.shape[0] * errors
 
-	learning_rate = 0.008
+	learning_rate = 0.1
 	best_score = total_cost/total_frames
 
 	print total_errors/total_frames,best_score
