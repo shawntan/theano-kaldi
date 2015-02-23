@@ -28,7 +28,7 @@ norm_vars=false # when doing cmvn, whether to normalize variance; has to be cons
 
 echo "$0 $@"  # Print the command line for logging
 
-[ -f ./path.sh ] && . ./path.sh; # source the path.
+#[ -f ./path.sh ] && . ./path.sh; # source the path.
 . parse_options.sh || exit 1;
 
 if [ $# != 4 ]; then

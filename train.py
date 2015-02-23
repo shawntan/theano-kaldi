@@ -28,6 +28,21 @@ config.parser.add_argument(
 		type = str,
 		help = "Location to write intermediate models to."
 	)
+config.parser.add_argument(
+		'--constraint-layer',
+		dest = 'constraint_layer',
+		required = True,
+		type = int,
+		help = "Layer to apply constraint."
+	)
+config.parser.add_argument(
+		'--constraint-weight',
+		dest = 'constraint_weight',
+		required = True,
+		type = float,
+		help = "Weight of constraint."
+	)
+
 config.parse_args()
 
 
@@ -43,7 +58,7 @@ import data_io
 import model
 import updates
 import cPickle as pickle
-
+import constraint
 if __name__ == "__main__":
 	frames_file = config.frames_file
 	labels_file = config.labels_file
@@ -63,8 +78,16 @@ if __name__ == "__main__":
 	end_idx = T.iscalar('end_idx')
 	lr = T.scalar('lr')
 
-	_,probs = feedforward(X)
-	loss = T.mean(T.nnet.categorical_crossentropy(probs,Y))
+	layers,probs = feedforward(X)
+	
+	cross_ent = T.mean(T.nnet.categorical_crossentropy(probs,Y))
+
+	loss = cross_ent
+	con_weight = config.args.constraint_weight
+	if con_weight and con_weight > 0:
+		print "Constraining hidden layer %d"%config.args.constraint_layer
+		loss += con_weight *\
+				constraint.adjacency(layers[config.args.constraint_layer+1],32,32)
 
 	parameters = params.values()
 	gradients = T.grad(loss,wrt=parameters)
@@ -75,7 +98,7 @@ if __name__ == "__main__":
 
 	train = theano.function(
 			inputs  = [lr,start_idx,end_idx],
-			outputs = loss,
+			outputs = cross_ent,
 			updates = updates.momentum(parameters,gradients,eps=lr),
 			givens  = {
 				X: X_shared[start_idx:end_idx],
@@ -84,7 +107,7 @@ if __name__ == "__main__":
 		)
 	test = theano.function(
 			inputs = [X,Y],
-			outputs = [loss,T.mean(T.neq(T.argmax(probs,axis=1),Y))]
+			outputs = [cross_ent,T.mean(T.neq(T.argmax(probs,axis=1),Y))]
 		)
 	if config.args.pretrain_file != None:
 		model.load(config.args.pretrain_file,params)

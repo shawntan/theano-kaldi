@@ -1,7 +1,21 @@
 import config
 config.parser.description = "theano-kaldi script for pretraining models using stacked denoising autoencoders."
+config.parser.add_argument(
+		'--constraint-layer',
+		dest = 'constraint_layer',
+		required = True,
+		type = int,
+		help = "Layer to apply constraint."
+	)
+config.parser.add_argument(
+		'--constraint-weight',
+		dest = 'constraint_weight',
+		required = True,
+		type = float,
+		help = "Weight of constraint."
+	)
 config.parse_args()
-
+import constraint
 import theano
 import theano.tensor as T
 
@@ -30,7 +44,7 @@ def reconstruct(corr_x,W,b,b_rec,input_layer):
 	recon  = T.dot(hidden,W.T) + b_rec
 	if not input_layer:
 		recon = config.hidden_activation(recon)
-	return recon
+	return recon,hidden
 
 def cost(x,recon_x,kl_divergence):
 	if not kl_divergence:
@@ -63,17 +77,18 @@ if __name__ == "__main__":
 		W = params["W_hidden_%d"%i]
 		b = params["b_hidden_%d"%i]
 		b_rec = theano.shared(np.zeros((layer_sizes[i],),dtype=theano.config.floatX))
-
-
-		loss = cost(
-				layer,
-				reconstruct(
+		recon, hidden = reconstruct(
 					corrupt(layer),
 					W,b,b_rec,
 					input_layer = (layer.name == 'X')
-				),
+				)
+		loss = cost(
+				layer,recon,
 				kl_divergence = ((layer.name != 'X') and (config.hidden_activation == T.nnet.sigmoid))
 			)
+		if i == config.args.constraint_layer:
+			print "Applying constraint on hidden layer %d."%i
+			loss += config.args.constraint_weight * constraint.adjacency(hidden,32,32)
 		lr = 0.01 if i > 0 else 0.003
 		parameters = [W,b,b_rec]
 		gradients  = T.grad(loss,wrt=parameters)
