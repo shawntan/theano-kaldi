@@ -1,5 +1,10 @@
 #!/bin/bash
 TK_DIR=$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )
+[ -f $TK_DIR/path.sh ] && . $TK_DIR/path.sh
+#set -e
+echo $PATH
+
+
 gmmdir=exp/tri3
 orig_dir=exp/dnn_fbank_tk_feedforward
 dir=exp/dnn_fbank_connect_all
@@ -85,7 +90,7 @@ python $TK_DIR/train_fine.py \
 	--structure $structure \
 	--temporary-file $dir/tmp.dnn.pkl \
 	--output-file $dir/dnn.pkl \
-	--minibatch 128 --max-epochs 100
+	--minibatch 128 --max-epochs 200
 
 
 #for output_layer in {0..6}

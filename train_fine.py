@@ -74,11 +74,12 @@ if __name__ == "__main__":
 
 	probs = outputs[-1]
 	loss = T.mean(T.nnet.categorical_crossentropy(probs,Y))
-	parameters = [ p for p in params.values()
-					if p.name not in [
-						"b_output_%d"%i for i in xrange(0,6) 
-					]
-				]
+	parameters = params.values()
+#	parameters = [ p for p in params.values()
+#					if p.name not in [
+#						"b_output_%d"%i for i in xrange(0,6) 
+#					]
+#				]
 #	parameters = [ params["W_output_%d"%i] for i in range(0,6) ] + \
 #				 [ params["b_output_6"] ]
 
@@ -119,7 +120,7 @@ if __name__ == "__main__":
 		total_cost   += f.shape[0] * loss
 		total_errors += f.shape[0] * errors
 
-	learning_rate = 0.1
+	learning_rate = 0.4
 	best_score = total_cost/total_frames
 
 	print total_errors/total_frames,best_score
@@ -158,7 +159,7 @@ if __name__ == "__main__":
 		else:
 			learning_rate *= 0.5
 			model.load(config.args.temporary_file,params)
-			if learning_rate < 1e-5: break
+			if learning_rate < 1e-6: break
 		print "Learning rate is now",learning_rate
 
 	model.load(config.args.temporary_file,params)

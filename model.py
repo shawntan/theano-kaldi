@@ -33,8 +33,6 @@ def build_feedforward(params,input_size=None,layer_sizes=None,output_size=None):
 		params[b_output_name] = theano.shared(np.zeros((output_size,),dtype=theano.config.floatX),name=b_output_name)
 		prev_layer_size = curr_size
 
-	W_output_name = "W_output_%d"%len(layer_sizes)
-	b_output_name = "b_output_%d"%len(layer_sizes)
 	params[W_output_name] = theano.shared(np.zeros((prev_layer_size,output_size),dtype=theano.config.floatX),name=W_output_name)
 	params[b_output_name] = theano.shared(np.zeros((output_size,),dtype=theano.config.floatX),name=b_output_name)
 	def feedforward(X):
@@ -47,7 +45,7 @@ def build_feedforward(params,input_size=None,layer_sizes=None,output_size=None):
 				output = output_layers[-1]
 			else:
 				output = 0
-			output += T.dot(hidden_layers[-1],params["W_output_%d"%i]) * gates[i].dimshuffle('x',0)
+			output += (T.dot(hidden_layers[-1],params["W_output_%d"%i]) + params["b_output_%d"%i]) * gates[i].dimshuffle('x',0)
 			output.name = "lin_output_%d"%i
 			output_layers.append(output)
 
@@ -59,7 +57,7 @@ def build_feedforward(params,input_size=None,layer_sizes=None,output_size=None):
 				hidden.name = "hidden_%d"%i
 				hidden_layers.append(hidden)
 
-		for i in xrange(len(output_layers)): output_layers[i] = T.nnet.softmax(output_layers[i] + params["b_output_%d"%i])
+		for i in xrange(len(output_layers)): output_layers[i] = T.nnet.softmax(output_layers[i])
 
 		return hidden_layers,output_layers
 

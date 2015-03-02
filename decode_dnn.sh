@@ -1,5 +1,7 @@
 #!/bin/bash
 
+TK_DIR=$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )
+[ -f $TK_DIR/path.sh ] && . $TK_DIR/path.sh
 # Copyright 2013    Yajie Miao    Carnegie Mellon University
 # Apache 2.0
 
@@ -28,7 +30,7 @@ norm_vars=false # when doing cmvn, whether to normalize variance; has to be cons
 
 echo "$0 $@"  # Print the command line for logging
 
-[ -f ./path.sh ] && . ./path.sh; # source the path.
+#[ -f ./path.sh ] && . ./path.sh; # source the path.
 . parse_options.sh || exit 1;
 
 if [ $# != 5 ]; then
