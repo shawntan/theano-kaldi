@@ -43,6 +43,7 @@ import data_io
 import model
 import updates
 import cPickle as pickle
+from pprint import pprint
 
 if __name__ == "__main__":
 	frames_file = config.frames_file
@@ -55,7 +56,6 @@ if __name__ == "__main__":
 	params = {}
 
 	feedforward = model.build_feedforward(params)
-	print params	
 	X = T.matrix('X')
 	Y = T.ivector('Y')
 
@@ -67,30 +67,31 @@ if __name__ == "__main__":
 	X_shared = theano.shared(np.zeros((1,config.input_size),dtype=theano.config.floatX))
 	Y_shared = theano.shared(np.zeros((1,),dtype=np.int32))
 
-
-#	loss = sum(T.mean(T.nnet.categorical_crossentropy(probs,Y))
-#				for probs in outputs)
-#	parameters = [ p for p in params.values() if "_output_" in p.name ]
-
-	probs = outputs[-1]
-	loss = T.mean(T.nnet.categorical_crossentropy(probs,Y))
+	probs = outputs
+	cross_entropy = T.mean(T.nnet.categorical_crossentropy(probs,Y))
+	loss = cross_entropy #+ 1e-8 * T.sum(params['W_gates']**2)
 	parameters = params.values()
+	
+#	parameters = [ params["W_gates"] ] +\
+#			[ params["W_output_%d"%i] for i in range(0,5) ] + \
+#			[ params["b_output_%d"%i] for i in range(0,5) ] 
+
 #	parameters = [ p for p in params.values()
 #					if p.name not in [
 #						"b_output_%d"%i for i in xrange(0,6) 
 #					]
 #				]
+
 #	parameters = [ params["W_output_%d"%i] for i in range(0,6) ] + \
 #				 [ params["b_output_6"] ]
 
 	print "Parameters to tune:"
-	print parameters
+	pprint(parameters)
 	gradients = T.grad(loss,wrt=parameters)
-	print parameters
 	train = theano.function(
-			inputs  = [lr,start_idx,end_idx],
-			outputs = loss,
-			updates = updates.momentum(parameters,gradients,eps=lr),
+			inputs  = [start_idx,end_idx],
+			outputs = cross_entropy,
+			updates = updates.adadelta(parameters,gradients),
 			givens  = {
 				X: X_shared[start_idx:end_idx],
 				Y: Y_shared[start_idx:end_idx]
@@ -103,10 +104,10 @@ if __name__ == "__main__":
 
 	if config.args.pretrain_file != None:
 		model.load(config.args.pretrain_file,params)
-#		with open(config.args.pretrain_file,'rb') as f:
-#			p = pickle.load(f)
-#			params['W_output_6'].set_value(p['W_output'])
-#			params['b_output_6'].set_value(p['b_output'])
+		with open(config.args.pretrain_file,'rb') as f:
+			p = pickle.load(f)
+#			params['W_output_5'].set_value(p['W_output'])
+#			params['b_output_5'].set_value(p['b_output'])
 
 	total_cost = 0
 	total_errors = 0
@@ -120,7 +121,7 @@ if __name__ == "__main__":
 		total_cost   += f.shape[0] * loss
 		total_errors += f.shape[0] * errors
 
-	learning_rate = 0.4
+	learning_rate = 0.5
 	best_score = total_cost/total_frames
 
 	print total_errors/total_frames,best_score
@@ -136,7 +137,7 @@ if __name__ == "__main__":
 			for idx in xrange(batch_count):
 				start = idx*minibatch_size
 				end = min((idx+1)*minibatch_size,size)
-				train(learning_rate,start,end)
+				train(start,end)
 		#print total_frames
 		total_cost = 0
 		total_errors = 0
@@ -153,13 +154,18 @@ if __name__ == "__main__":
 		cost = total_cost/total_frames
 
 		print total_errors/total_frames,cost
-		if cost < best_score:
+		
+		_best_score = best_score
+
+		if cost < _best_score:
 			best_score = cost
 			model.save(config.args.temporary_file,params)
-		else:
+
+		if cost/_best_score > 0.995:
 			learning_rate *= 0.5
 			model.load(config.args.temporary_file,params)
-			if learning_rate < 1e-6: break
+
+		if learning_rate < 1e-6: break
 		print "Learning rate is now",learning_rate
 
 	model.load(config.args.temporary_file,params)

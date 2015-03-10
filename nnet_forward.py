@@ -19,7 +19,7 @@ def create_model(filename,counts,input_size,layer_sizes,output_size,output_layer
 	_,outputs = predict(X)
 	f = theano.function(
 			inputs = [X],
-			outputs = T.log(outputs[output_layer]) - T.log(counts/T.sum(counts))
+			outputs = T.log(outputs) - T.log(counts/T.sum(counts))
 		)
 	return f
 

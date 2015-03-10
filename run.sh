@@ -100,5 +100,5 @@ output_layer=6
 		--scoring-opts "--min-lmwt 1 --max-lmwt 8" \
 		--norm-vars true \
 		$gmmdir/graph $dir/data/test \
-		${gmmdir}_ali $dir/decode_test_$output_layer $output_layer
+		${gmmdir}_ali $dir/decode_test $output_layer
 #done

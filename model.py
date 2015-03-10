@@ -21,7 +21,10 @@ def build_feedforward(params,input_size=None,layer_sizes=None,output_size=None):
 	output_size = output_size or config.output_size
 
 	prev_layer_size = input_size
-	params["W_gates"] = theano.shared(np.zeros((output_size,len(layer_sizes)+1),dtype=theano.config.floatX),name="W_gates")
+	gate_weights = np.zeros((output_size,len(layer_sizes)),dtype=theano.config.floatX)
+	gate_weights[:,-1] = 1
+	#gate_weights[:,:-1] = -1
+	params["W_gates"] = theano.shared(gate_weights,name="W_gates")
 	for i,curr_size in enumerate(layer_sizes):
 		W_name        = "W_hidden_%d"%i 
 		b_name        = "b_hidden_%d"%i
@@ -29,37 +32,26 @@ def build_feedforward(params,input_size=None,layer_sizes=None,output_size=None):
 		b_output_name = "b_output_%d"%i
 		params[W_name]        = theano.shared(initial_weights(prev_layer_size,curr_size,factor=4 if i>0 else 0.1),name=W_name)
 		params[b_name]        = theano.shared(np.zeros((curr_size,),dtype=theano.config.floatX),name=b_name)
-		params[W_output_name] = theano.shared(np.zeros((prev_layer_size,output_size),dtype=theano.config.floatX),name=W_output_name)
+		params[W_output_name] = theano.shared(np.zeros((curr_size,output_size),dtype=theano.config.floatX),name=W_output_name)
 		params[b_output_name] = theano.shared(np.zeros((output_size,),dtype=theano.config.floatX),name=b_output_name)
 		prev_layer_size = curr_size
 
-	params[W_output_name] = theano.shared(np.zeros((prev_layer_size,output_size),dtype=theano.config.floatX),name=W_output_name)
-	params[b_output_name] = theano.shared(np.zeros((output_size,),dtype=theano.config.floatX),name=b_output_name)
 	def feedforward(X):
-		gates = T.nnet.softmax(params["W_gates"]).T
+		gates = T.nnet.softmax(params["W_gates"]).T.dimshuffle(0,'x',1)
 		hidden_layers = [X]
-		output_layers = []
+		lin_output = 0
+		for i in xrange(len(layer_sizes)):
+			hidden = config.hidden_activation(
+					T.dot(hidden_layers[-1],params["W_hidden_%d"%i]) +\
+					params["b_hidden_%d"%i]
+				)
+			hidden.name = "hidden_%d"%i
+			hidden_layers.append(hidden)
+			lin_output += gates[i] * ( T.dot(hidden,params["W_output_%d"%i]) 
+							+ params["b_output_%d"%i] )
 
-		for i in xrange(len(layer_sizes)+1):
-			if len(output_layers) > 0:
-				output = output_layers[-1]
-			else:
-				output = 0
-			output += (T.dot(hidden_layers[-1],params["W_output_%d"%i]) + params["b_output_%d"%i]) * gates[i].dimshuffle('x',0)
-			output.name = "lin_output_%d"%i
-			output_layers.append(output)
-
-			if i < len(layer_sizes):
-				hidden = config.hidden_activation(
-						T.dot(hidden_layers[-1],params["W_hidden_%d"%i]) +\
-						params["b_hidden_%d"%i]
-					)
-				hidden.name = "hidden_%d"%i
-				hidden_layers.append(hidden)
-
-		for i in xrange(len(output_layers)): output_layers[i] = T.nnet.softmax(output_layers[i])
-
-		return hidden_layers,output_layers
+		outputs = T.nnet.softmax(lin_output)
+		return hidden_layers,outputs
 
 	return feedforward
 
