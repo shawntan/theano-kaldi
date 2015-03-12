@@ -88,17 +88,23 @@ python $TK_DIR/train_fine.py \
 	--validation-labels-file $dir/pkl/val.train_lbl.pklgz \
 	--pretrain-file $orig_dir/pretrain.pkl \
 	--structure $structure \
-	--temporary-file $dir/tmp.dnn.pkl \
-	--output-file $dir/dnn.pkl \
+	--temporary-file $dir/tmp.dnn.dynamic_gates.pkl \
+	--output-file $dir/dnn.dynamic_gates.pkl \
 	--minibatch 128 --max-epochs 200
 
-
-#for output_layer in {0..6}
+rm $dir/dnn.pkl
+ln -s dnn.adjust_gates.pkl $dir/dnn.pkl
+#for output_layer in {0..5}
 #do
-output_layer=6
-	$TK_DIR/decode_dnn.sh --nj 1 \
-		--scoring-opts "--min-lmwt 1 --max-lmwt 8" \
-		--norm-vars true \
-		$gmmdir/graph $dir/data/test \
-		${gmmdir}_ali $dir/decode_test $output_layer
+#	$TK_DIR/decode_dnn.sh --nj 1 \
+#		--scoring-opts "--min-lmwt 1 --max-lmwt 8" \
+#		--norm-vars true \
+#		$gmmdir/graph $dir/data/test \
+#		${gmmdir}_ali $dir/decode_test_$output_layer $output_layer
 #done
+$TK_DIR/decode_dnn.sh --nj 1 \
+	--scoring-opts "--min-lmwt 1 --max-lmwt 8" \
+	--norm-vars true \
+	$gmmdir/graph $dir/data/test \
+	${gmmdir}_ali $dir/decode_test "-1" 
+

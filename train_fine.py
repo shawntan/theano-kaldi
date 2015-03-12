@@ -63,18 +63,19 @@ if __name__ == "__main__":
 	end_idx = T.iscalar('end_idx')
 	lr = T.scalar('lr')
 
-	_, outputs = feedforward(X)
+	_,output_layers,outputs = feedforward(X)
 	X_shared = theano.shared(np.zeros((1,config.input_size),dtype=theano.config.floatX))
 	Y_shared = theano.shared(np.zeros((1,),dtype=np.int32))
 
-	probs = outputs
-	cross_entropy = T.mean(T.nnet.categorical_crossentropy(probs,Y))
-	loss = cross_entropy #+ 1e-8 * T.sum(params['W_gates']**2)
+#	cross_entropy = [ T.mean(T.nnet.categorical_crossentropy(o,Y)) for o in output_layers ]
+#	loss = sum(cross_entropy) #+ 1e-8 * T.sum(params['W_gates']**2)
+
+	loss = cross_entropy = T.mean(T.nnet.categorical_crossentropy(outputs,Y)
 	parameters = params.values()
-	
-#	parameters = [ params["W_gates"] ] +\
-#			[ params["W_output_%d"%i] for i in range(0,5) ] + \
-#			[ params["b_output_%d"%i] for i in range(0,5) ] 
+
+#	parameters = [ p for p in params.values() if "_gate" in p.name ]
+#	parameters = [ params["W_output_%d"%i] for i in range(0,5) ] + \
+#				 [ params["b_output_%d"%i] for i in range(0,5) ] 
 
 #	parameters = [ p for p in params.values()
 #					if p.name not in [
@@ -88,26 +89,42 @@ if __name__ == "__main__":
 	print "Parameters to tune:"
 	pprint(parameters)
 	gradients = T.grad(loss,wrt=parameters)
+
 	train = theano.function(
-			inputs  = [start_idx,end_idx],
+			inputs  = [lr,start_idx,end_idx],
 			outputs = cross_entropy,
-			updates = updates.adadelta(parameters,gradients),
+			updates = updates.momentum(parameters,gradients,eps=lr),
+#			updates = [ (p,p - lr * g) for p,g in zip(parameters,gradients) ],
 			givens  = {
 				X: X_shared[start_idx:end_idx],
 				Y: Y_shared[start_idx:end_idx]
 			}
 		)
+
+	"""
+	oracles = []
+	for final in xrange(2,7):
+		correct = sum(T.eq(T.argmax(o,axis=1),Y) for o in output_layers[-final:])
+		correct = correct > 0
+		oracle_score = 1 - T.mean(correct)
+		oracles.append(oracle_score)
+	"""
+
 	test = theano.function(
 			inputs = [X,Y],
-			outputs = [loss,T.mean(T.neq(T.argmax(probs,axis=1),Y))]
+			outputs = [loss] + [ T.mean(T.neq(T.argmax(o,axis=1),Y)) for o in output_layers ]
 		)
 
 	if config.args.pretrain_file != None:
-		model.load(config.args.pretrain_file,params)
 		with open(config.args.pretrain_file,'rb') as f:
-			p = pickle.load(f)
-#			params['W_output_5'].set_value(p['W_output'])
-#			params['b_output_5'].set_value(p['b_output'])
+			for k,v in pickle.load(f).iteritems():
+				if k in params and k != "W_gates":
+					params[k].set_value(v)
+		model.save(config.args.temporary_file,params)
+		#with open(config.args.pretrain_file,'rb') as f:
+		#	p = pickle.load(f)
+		#	params['W_output_5'].set_value(p['W_output'])
+		#	params['b_output_5'].set_value(p['b_output'])
 
 	total_cost = 0
 	total_errors = 0
@@ -137,11 +154,12 @@ if __name__ == "__main__":
 			for idx in xrange(batch_count):
 				start = idx*minibatch_size
 				end = min((idx+1)*minibatch_size,size)
-				train(start,end)
+				train(learning_rate,start,end)
 		#print total_frames
 		total_cost = 0
 		total_errors = 0
 		total_frames = 0
+
 		for f,l in data_io.stream(val_frames_file,val_labels_file):
 			test_outputs  = test(f,l)
 			loss = test_outputs[0]
