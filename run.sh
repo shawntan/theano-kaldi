@@ -39,9 +39,9 @@ time copy-feats scp:$dir/data/train/feats.scp ark:- \
 python2 $TK_DIR/picklise_lbl.py $ali_dir $dir/pkl/train_lbl.pklgz
 
 
-um_pdfs=`gmm-info $gmmdir/final.mdl | grep pdfs | awk '{print $NF}'`
-tructure="$(cat $dir/input_dim):1024:1024:1024:1024:1024:1024:$num_pdfs"
-cho $structure > $dir/structure
+num_pdfs=`gmm-info $gmmdir/final.mdl | grep pdfs | awk '{print $NF}'`
+structure="$(cat $dir/input_dim):1024:1024:1024:1024:1024:1024:$num_pdfs"
+echo $structure > $dir/structure
 structure=$(cat $dir/structure)
 
 python $TK_DIR/split_dataset.py \
