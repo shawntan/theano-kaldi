@@ -63,7 +63,7 @@ def randomise(stream,buffer_size=2**16,limit=-1):
 
 
 if __name__ == "__main__":
-	for f,l in randomise(sys.argv[1],sys.argv[2]):
+	for f,l in stream(sys.argv[1],sys.argv[2]):
 		print f.shape
-		print l.shape
+		print l
 

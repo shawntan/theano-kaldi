@@ -76,24 +76,29 @@ do
 #		--constraint-layer $layer --constraint-weight 0.0125
 
 
-	python $TK_DIR/train.py \
-		--frames-file $dir/pkl/trn.train.pklgz \
-		--labels-file $dir/pkl/trn.train_lbl.pklgz \
-		--validation-frames-file $dir/pkl/val.train.pklgz \
-		--validation-labels-file $dir/pkl/val.train_lbl.pklgz \
-		--structure $structure \
-		--pretrain-file $dir/pretrain_${layer}.pkl \
-		--temporary-file $dir/tmp.dnn.pkl \
-		--output-file $dir/dnn_${layer}.pkl \
-		--minibatch 128 --max-epochs 100 \
-		--constraint-layer $layer --constraint-weight 0.0125
+#	python $TK_DIR/train.py \
+#		--frames-file $dir/pkl/trn.train.pklgz \
+#		--labels-file $dir/pkl/trn.train_lbl.pklgz \
+#		--validation-frames-file $dir/pkl/val.train.pklgz \
+#		--validation-labels-file $dir/pkl/val.train_lbl.pklgz \
+#		--structure $structure \
+#		--pretrain-file $dir/pretrain_${layer}.pkl \
+#		--temporary-file $dir/tmp.dnn.pkl \
+#		--output-file $dir/dnn_${layer}.pkl \
+#		--minibatch 128 --max-epochs 100 \
+#		--constraint-layer $layer --constraint-weight 0.0125
 
 	rm $dir/dnn.pkl
 	ln -s dnn_${layer}.pkl $dir/dnn.pkl
-
 	$TK_DIR/decode_dnn.sh --nj 1 \
 		--scoring-opts "--min-lmwt 1 --max-lmwt 8" \
 		--norm-vars true \
-		$gmmdir/graph $dir/data/test \
-		${gmmdir}_ali $dir/decode_test_$layer
+		$gmmdir/graph $dir/data/dev \
+		${gmmdir}_ali $dir/decode_dev_$layer
+
+#	$TK_DIR/decode_dnn.sh --nj 1 \
+#		--scoring-opts "--min-lmwt 1 --max-lmwt 8" \
+#		--norm-vars true \
+#		$gmmdir/graph $dir/data/test \
+#		${gmmdir}_ali $dir/decode_test_$layer
 done

@@ -32,12 +32,23 @@ def label_stream(ali_dir):
 		pdfs = map(int,l[1:])
 		yield name,pdfs
 
+def stdin_label_stream():
+	for l in sys.stdin:
+		l = l.rstrip().split()
+		name = l[0]
+		pdfs = map(int,l[1:])
+		yield name,pdfs
+
+
 
 
 if __name__ == "__main__":
 	ali_dir = sys.argv[1]
 	output_file = sys.argv[2]
-	labels = label_stream(ali_dir)
+	if ali_dir == "-":
+		labels = stdin_label_stream()
+	else:
+		labels = label_stream(ali_dir)
 	with gzip.open(output_file,'wb') as f:
 		count = 0
 		for name,lbls in labels:
