@@ -1,5 +1,4 @@
 #!/bin/bash
-
 TK_DIR=$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )
 [ -f $TK_DIR/path.sh ] && . $TK_DIR/path.sh
 # Copyright 2013    Yajie Miao    Carnegie Mellon University

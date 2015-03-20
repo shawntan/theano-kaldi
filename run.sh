@@ -81,19 +81,19 @@ echo $structure > $dir/structure
 #	--output-file $dir/dnn.pkl \
 #	--minibatch 256 --max-epochs 100
 
-python $TK_DIR/train_fine.py \
-	--frames-file $dir/pkl/trn.train.pklgz \
-	--labels-file $dir/pkl/trn.train_lbl.pklgz \
-	--validation-frames-file $dir/pkl/val.train.pklgz \
-	--validation-labels-file $dir/pkl/val.train_lbl.pklgz \
-	--pretrain-file $orig_dir/pretrain.pkl \
-	--structure $structure \
-	--temporary-file $dir/tmp.dnn.dynamic_gates.pkl \
-	--output-file $dir/dnn.dynamic_gates.pkl \
-	--minibatch 128 --max-epochs 200
+#python $TK_DIR/train_fine.py \
+#	--frames-file $dir/pkl/trn.train.pklgz \
+#	--labels-file $dir/pkl/trn.train_lbl.pklgz \
+#	--validation-frames-file $dir/pkl/val.train.pklgz \
+#	--validation-labels-file $dir/pkl/val.train_lbl.pklgz \
+#	--pretrain-file $orig_dir/dnn.pkl \
+#	--structure $structure \
+#	--temporary-file $dir/tmp.dnn.dynamic_gates.pkl \
+#	--output-file $dir/dnn.dynamic_gates.pkl \
+#	--minibatch 128 --max-epochs 200
 
 rm $dir/dnn.pkl
-ln -s dnn.adjust_gates.pkl $dir/dnn.pkl
+ln -s dnn.separate.pkl $dir/dnn.pkl
 #for output_layer in {0..5}
 #do
 #	$TK_DIR/decode_dnn.sh --nj 1 \
@@ -102,9 +102,18 @@ ln -s dnn.adjust_gates.pkl $dir/dnn.pkl
 #		$gmmdir/graph $dir/data/test \
 #		${gmmdir}_ali $dir/decode_test_$output_layer $output_layer
 #done
-$TK_DIR/decode_dnn.sh --nj 1 \
-	--scoring-opts "--min-lmwt 1 --max-lmwt 8" \
-	--norm-vars true \
-	$gmmdir/graph $dir/data/test \
-	${gmmdir}_ali $dir/decode_test "-1" 
+#$TK_DIR/decode_dnn_dynstack.sh --nj 1 \
+#	--scoring-opts "--min-lmwt 1 --max-lmwt 8" \
+#	--norm-vars true \
+#	$gmmdir/graph $dir/data/test \
+#	${gmmdir}_ali $dir/decode_test_entropy_mean $threshold
+
+#for threshold in {-0.1,-0.2,-0.3,-0.4,-0.5,-0.6,-0.7,-0.8,-0.9,-1.0}
+#do
+	$TK_DIR/decode_dnn_dynstack.sh --nj 1 \
+		--scoring-opts "--min-lmwt 1 --max-lmwt 8" \
+		--norm-vars true \
+		$gmmdir/graph $dir/data/test \
+		${gmmdir}_ali $dir/decode_test_entropy_learnt -1
+#done
 

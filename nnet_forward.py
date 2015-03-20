@@ -16,7 +16,7 @@ def create_model(filename,counts,input_size,layer_sizes,output_size,output_layer
 	params = {}
 	predict = model.build_feedforward(params,input_size,layer_sizes,output_size)
 	model.load(filename,params)
-	_,output_layers,outputs = predict(X)
+	_,lin_output_layers,output_layers,outputs = predict(X)
 	if output_layer != -1:
 		outputs = output_layers[output_layer]
 	f = theano.function(

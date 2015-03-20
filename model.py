@@ -26,25 +26,24 @@ def build_feedforward(params,input_size=None,layer_sizes=None,output_size=None):
 
 	prev_layer_size = input_size
 	gate_weights = np.zeros((len(layer_sizes),),dtype=theano.config.floatX)
-	params["b_gate"] = theano.shared(gate_weights,name="b_gate")
+	#params["b_gate"] = theano.shared(gate_weights,name="b_gate")
 	for i,curr_size in enumerate(layer_sizes):
 		W_name        = "W_hidden_%d"%i 
 		b_name        = "b_hidden_%d"%i
 		W_output_name = "W_output_%d"%i 
 		b_output_name = "b_output_%d"%i
-		W_gate_name = "W_gate_%d"%i
+	#	W_gate_name = "W_gate_%d"%i
 		params[W_name]        = theano.shared(initial_weights(prev_layer_size,curr_size,factor=4 if i>0 else 0.1),name=W_name)
 		params[b_name]        = theano.shared(np.zeros((curr_size,),dtype=theano.config.floatX),name=b_name)
 		params[W_output_name] = theano.shared(np.zeros((curr_size,output_size),dtype=theano.config.floatX),name=W_output_name)
 		params[b_output_name] = theano.shared(np.zeros((output_size,),dtype=theano.config.floatX),name=b_output_name)
-		params[W_gate_name]   = theano.shared(np.zeros((curr_size,len(layer_sizes)),dtype=theano.config.floatX),name=W_gate_name)
+	#	params[W_gate_name]   = theano.shared(np.zeros((curr_size,len(layer_sizes)),dtype=theano.config.floatX),name=W_gate_name)
 		prev_layer_size = curr_size
 
 	def feedforward(X):
-#		gates = T.nnet.softmax(params["W_gates"]).T.dimshuffle(0,'x',1)
 		lin_gate = 0
 		hidden_layers = [X]
-		output_layers = []
+		lin_output_layers = []
 		for i in xrange(len(layer_sizes)):
 
 			hidden = config.hidden_activation(
@@ -54,20 +53,14 @@ def build_feedforward(params,input_size=None,layer_sizes=None,output_size=None):
 			hidden.name = "hidden_%d"%i
 
 			lin_output = T.dot(hidden,params["W_output_%d"%i]) + params["b_output_%d"%i]
-			output = lin_output
+			output = lin_output #+ (output_layers[-1] if output_layers else 0)
 			output.name = "output_%d"%i
 
-			lin_gate += T.dot(hidden,params["W_gate_%d"%i])
 			hidden_layers.append(hidden)
-			output_layers.append(output)
+			lin_output_layers.append(output)
 		
-		gates = T.nnet.softmax(lin_gate + params["b_gate"])
-
-		outputs = sum(
-				gates[:,i].dimshuffle(0,'x') * output_layers[i] for i in xrange(len(layer_sizes))
-			)
-		
-		return hidden_layers,output_layers,outputs
+		output_layers = [T.nnet.softmax(o) for o in lin_output_layers]	
+		return hidden_layers,lin_output_layers,output_layers,output_layers[-1]
 
 	return feedforward
 
