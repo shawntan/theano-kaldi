@@ -13,6 +13,7 @@ import data_io
 import model
 import updates
 import cPickle as pickle
+from itertools import izip, chain
 
 theano_rng = T.shared_randomstreams.RandomStreams(np.random.RandomState(1234).randint(2**30))
 
@@ -39,8 +40,8 @@ def cost(x,recon_x,kl_divergence):
 		return -T.mean(T.sum(x * T.log(recon_x) + (1 - x) * T.log(1 - recon_x), axis=1))
 
 if __name__ == "__main__":
-	frames_file = config.frames_file
-	labels_file = config.labels_file
+	frames_files = config.frames_files
+	labels_files = config.labels_files
 	
 	minibatch_size = config.minibatch
 
@@ -93,7 +94,8 @@ if __name__ == "__main__":
 	for layer_idx,train in enumerate(pretrain_functions):	
 		print "Pretraining layer",layer_idx,"..."
 		for epoch in xrange(config.max_epochs):	
-			stream = data_io.stream(frames_file,labels_file)
+			split_streams = [ data_io.stream(f,l) for f,l in izip(frames_files,labels_files) ]
+			stream = chain(*split_streams)
 			total_count = 0
 			total_loss  = 0
 			for f,_,size in data_io.randomise(stream):

@@ -44,10 +44,12 @@ import model
 import updates
 import cPickle as pickle
 from pprint import pprint
+from itertools import izip, chain
 
 if __name__ == "__main__":
-	frames_file = config.frames_file
-	labels_file = config.labels_file
+	frames_files = config.frames_files
+	labels_files = config.labels_files
+	print frames_files
 	val_frames_file = config.args.val_frames_file
 	val_labels_file = config.args.val_labels_file
 	
@@ -116,7 +118,8 @@ if __name__ == "__main__":
 		print total_errors/total_frames,best_score
 
 		for epoch in xrange(config.max_epochs):
-			stream = data_io.stream(frames_file,labels_file)
+			split_streams = [ data_io.stream(f,l) for f,l in izip(frames_files,labels_files) ]
+			stream = chain(*split_streams)
 			total_frames = 0
 			for f,l,size in data_io.randomise(stream):
 				total_frames += f.shape[0]
@@ -151,11 +154,11 @@ if __name__ == "__main__":
 				best_score = cost
 				model.save(config.args.temporary_file,params)
 
-			if cost/_best_score > 0.9995:
+			if cost/_best_score > 0.99995:
 				learning_rate *= 0.5
 				model.load(config.args.temporary_file,params)
 
-			if learning_rate < 1e-5: break
+			if learning_rate < 1e-6: break
 			print "Learning rate is now",learning_rate
 
 		model.load(config.args.temporary_file,params)

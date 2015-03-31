@@ -3,19 +3,21 @@ import theano.tensor as T
 parser = argparse.ArgumentParser()
 
 parser.add_argument(
-		'--frames-file',
-		dest = 'frames_file',
+		'--frames-files',
+		nargs = '+',
+		dest = 'frames_files',
 		required = True,
 		type = str,
-		help = ".pklgz file containing pickled (name,frames) pairs for training"
+		help = ".pklgz files containing pickled (name,frames) pairs for training"
 	)
 
 parser.add_argument(
-		'--labels-file',
-		dest = 'labels_file',
+		'--labels-files',
+		nargs = '+',
+		dest = 'labels_files',
 		required = True,
 		type = str,
-		help = ".pklgz file containing pickled (name,frames) pairs for training"
+		help = ".pklgz files containing pickled (name,frames) pairs for training"
 	)
 
 parser.add_argument(
@@ -59,9 +61,9 @@ parser.add_argument(
 	)
 
 
-frames_file = None
-labels_file = None
-output_file = None
+frames_files = None
+labels_files = None
+output_files = None
 hidden_activation = T.nnet.sigmoid
 input_size = 360
 layer_sizes = [1024]*5
@@ -74,8 +76,8 @@ def parse_args():
 			input_size,\
 			layer_sizes,\
 			output_size,\
-			frames_file,\
-			labels_file,\
+			frames_files,\
+			labels_files,\
 			output_file,\
 			minibatch,\
 			max_epochs,\
@@ -85,8 +87,8 @@ def parse_args():
 	input_size = args.structure[0]
 	layer_sizes = args.structure[1:-1]
 	output_size = args.structure[-1]
-	frames_file = args.frames_file
-	labels_file = args.labels_file
+	frames_files = args.frames_files
+	labels_files = args.labels_files
 	output_file = args.output_file
 	minibatch = args.minibatch
 	max_epochs = args.max_epochs

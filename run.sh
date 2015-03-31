@@ -7,9 +7,10 @@ gmmdir=exp/tri3
 ali_dir=${gmmdir}_ali
 
 # Output folder
-dir=exp/dnn_fbank_tk_feedforward_test
+dir=exp/dnn_fbank_tk_feedforward
 
 # Settings
+num_jobs=20
 norm_vars=true
 echo "--left-context=5 --right-context=5" > $dir/splice_opts
 splice_opts=`cat $dir/splice_opts 2>/dev/null` # frame-splicing options.
@@ -30,7 +31,7 @@ for set in train dev test
 do
 	cp -r data/$set $dir/data/$set
 	rm -rf $dir/data/$set/{cmvn,feats}.scp $dir/data/$set/split*
-	steps/make_fbank.sh --fbank-config conf/fbank.conf --cmd "run.pl" --nj 10 $dir/data/$set $dir/_log $dir/_fbank || exit 1;
+	steps/make_fbank.sh --fbank-config conf/fbank.conf --cmd "run.pl" --nj $numb_jobs $dir/data/$set $dir/_log $dir/_fbank || exit 1;
 done
 )
 
@@ -48,45 +49,36 @@ add-deltas --delta-order=$(cat $dir/delta_order) ark:- ark:- |\
 splice-feats $splice_opts ark:- ark:- |\
 nnet-forward $dir/feature_transform ark:- ark,t:- \
 "
+[ -f $dir/pkl/train.00.pklgz ] || $TK_DIR/prepare_pickle.sh $num_jobs \
+	$dir/data/train/feats.scp \
+	$ali_dir \
+	$dir/pkl/train \
+	$dir/_log/split \
+	"$feat_transform" || exit 1;
 
-[ -f $dir/pkl/train.pklgz ] || \
-	copy-feats scp:$dir/data/train/feats.scp ark:- \
-	| eval $feat_transform \
-	| python2 $TK_DIR/pickle_ark_stream.py $dir/pkl/train.pklgz || exit 1;
-
-[ -f $dir/pkl/train_lbl.pklgz ] || \
-	gunzip -c $( ls $ali_dir/ali.*.gz | sort -V ) \
-	| ali-to-pdf $ali_dir/final.mdl ark:- ark,t:- \
-	| python2 $TK_DIR/pickle_ali.py $dir/pkl/train_lbl.pklgz || exit 1;
-
+# Training of the nnet.
 num_pdfs=`gmm-info $gmmdir/final.mdl | grep pdfs | awk '{print $NF}'`
 input_dim=`copy-feats scp:$dir/data/train/feats.scp ark:- | eval $feat_transform | feat-to-dim ark:- -`
 structure="$input_dim:1024:1024:1024:1024:1024:1024:$num_pdfs"
-model_name=standard
-[ -f $dir/pkl/trn.train.pklgz ] || \
-	python $TK_DIR/split_dataset.py \
-	$dir/pkl/train.pklgz \
-	$dir/pkl/train_lbl.pklgz \
-	0.05 \
-	$dir/pkl/trn.train.pklgz \
-	$dir/pkl/trn.train_lbl.pklgz \
-	$dir/pkl/val.train.pklgz \
-	$dir/pkl/val.train_lbl.pklgz
+model_name=split
+
+frame_files=($dir/pkl/train.*.pklgz)
+label_files=($dir/pkl/train_lbl.*.pklgz)
 
 [ -f $dir/pretrain.pkl ] || \
 	python $TK_DIR/pretrain_sda.py\
-	--frames-file $dir/pkl/trn.train.pklgz \
-	--labels-file $dir/pkl/trn.train_lbl.pklgz \
+	--frames-file ${frame_files[@]:1} \
+	--labels-file ${label_files[@]:1} \
 	--structure $structure \
 	--output-file $dir/pretrain.pkl \
 	--minibatch 128 --max-epochs 20
 
 [ -f $dir/dnn.${model_name}.pkl ] || \
 	python $TK_DIR/train.py \
-	--frames-file			 $dir/pkl/trn.train.pklgz \
-	--labels-file			 $dir/pkl/trn.train_lbl.pklgz \
-	--validation-frames-file $dir/pkl/val.train.pklgz \
-	--validation-labels-file $dir/pkl/val.train_lbl.pklgz \
+	--frames-file			 ${frame_files[@]:1} \
+	--labels-file			 ${label_files[@]:1} \
+	--validation-frames-file ${frame_files[0]}   \
+	--validation-labels-file ${label_files[0]}   \
 	--structure $structure \
 	--pretrain-file $dir/pretrain.pkl \
 	--temporary-file $dir/tmp.dnn.${model_name}.pkl \
