@@ -60,7 +60,7 @@ nnet-forward $dir/feature_transform ark:- ark,t:- \
 # Training of the nnet.
 num_pdfs=`gmm-info $gmmdir/final.mdl | grep pdfs | awk '{print $NF}'`
 input_dim=`copy-feats scp:$dir/data/train/feats.scp ark:- | eval $feat_transform | feat-to-dim ark:- -`
-structure="$input_dim:1024:1024:1024:1024:1024:1024:$num_pdfs"
+structure="$input_dim:2048:2048:2048:2048:2048:2048:$num_pdfs"
 model_name=split
 
 frame_files=($dir/pkl/train.*.pklgz)
@@ -72,7 +72,7 @@ label_files=($dir/pkl/train_lbl.*.pklgz)
 	--labels-files ${label_files[@]:1} \
 	--structure $structure \
 	--output-file $dir/pretrain.pkl \
-	--minibatch 128 --max-epochs 20
+	--minibatch 256 --max-epochs 2
 
 [ -f $dir/dnn.${model_name}.pkl ] || \
 	python $TK_DIR/train.py \
