@@ -9,6 +9,12 @@ ali_dir=${gmmdir}_ali
 # Output folder
 dir=exp/dnn_fbank_tk_feedforward
 
+# Create directories
+[ -d $dir ]      || mkdir -p $dir
+[ -d $dir/data ] || mkdir -p $dir/data
+[ -d $dir/pkl ]  || mkdir -p $dir/pkl
+
+
 # Settings
 num_jobs=20
 norm_vars=true
@@ -20,18 +26,13 @@ echo "--use-energy=true"
 echo "--num-mel-bins=40"
 } > conf/fbank.conf
 
-# Create directories
-[ -d $dir ]      || mkdir -p $dir
-[ -d $dir/data ] || mkdir -p $dir/data
-[ -d $dir/pkl ]  || mkdir -p $dir/pkl
-
 # Create fbank data set.
 [ -d $dir/_fbank ] || (
 for set in train dev test
 do
 	cp -r data/$set $dir/data/$set
 	rm -rf $dir/data/$set/{cmvn,feats}.scp $dir/data/$set/split*
-	steps/make_fbank.sh --fbank-config conf/fbank.conf --cmd "run.pl" --nj $numb_jobs $dir/data/$set $dir/_log $dir/_fbank || exit 1;
+	steps/make_fbank.sh --fbank-config conf/fbank.conf --cmd "run.pl" --nj $num_jobs $dir/data/$set $dir/_log $dir/_fbank || exit 1;
 done
 )
 
@@ -49,7 +50,7 @@ add-deltas --delta-order=$(cat $dir/delta_order) ark:- ark:- |\
 splice-feats $splice_opts ark:- ark:- |\
 nnet-forward $dir/feature_transform ark:- ark,t:- \
 "
-[ -f $dir/pkl/train.00.pklgz ] || $TK_DIR/prepare_pickle.sh $num_jobs \
+[ -f $dir/pkl/train.00.pklgz ] || time $TK_DIR/prepare_pickle.sh $num_jobs \
 	$dir/data/train/feats.scp \
 	$ali_dir \
 	$dir/pkl/train \

@@ -28,8 +28,8 @@ gunzip -c $( ls $ali_dir/ali.*.gz | sort -V ) \
 	| ali-to-pdf $ali_dir/final.mdl ark:- ark,t:- \
 	> $data_ali_file
 echo "Filtering features file."
-cat ~/timit-s5/exp/dnn_fbank_tk_feedforward_test/data/train/feats.scp \
-	| grep -f <(cut -f1 -d' ' $data_ali_file ) \
+cat $feats_file \
+	| grep -F -f <(cut -f1 -d' ' $data_ali_file ) \
 	> $data_feats_file
 
 echo "Splitting and shuffling files."
@@ -37,17 +37,17 @@ shuf --random-source=$log_dir/rand $data_ali_file   | split -d --lines=${lines_p
 shuf --random-source=$log_dir/rand $data_feats_file | split -d --lines=${lines_per_file} - "$tmp_dir/feats.scp."
 
 ls $tmp_dir/feats.scp.* | xargs -n 1 -P $num_jobs sh -c '
-echo "Starting job... $@"
-for filename
-do
-	idx=${filename##*.}
+filename=$1
+echo "Starting job... $filename"
+idx=${filename##*.}
+{
 	echo "Starting on split $idx."
 	copy-feats scp:"$filename" ark:- \
 		| '"$feat_transform"' \
-		| python2 "'$TK_DIR'/pickle_ark_stream.py" "'"$output_prefix"'.$idx.pklgz"
+		| python2 -u "'$TK_DIR'/pickle_ark_stream.py" "'"$output_prefix"'.$idx.pklgz"
 	cat "'$tmp_dir'/full.ali.$idx" | python2 "'$TK_DIR'/pickle_ali.py" "'"$output_prefix"'_lbl.$idx.pklgz"
-done  > "'$log_dir'/split.$idx.log" 2>&1
+} > "'$log_dir'/split.$idx.log" 2>&1
 echo "Done."
 ' fnord
-rm -rf $tmp_dir
+#rm -rf $tmp_dir
 PYTHONPATH=theano-kaldi/ python -c "import sys;import data_io;[ n for n,_,_ in data_io.stream('${output_prefix}.00.pklgz','${output_prefix}_lbl.00.pklgz',with_name=True)]"
