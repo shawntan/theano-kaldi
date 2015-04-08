@@ -1,5 +1,19 @@
 import config
 config.parser.description = "theano-kaldi script for pretraining models using stacked denoising autoencoders."
+config.parser.add_argument(
+		'--constraint-layer',
+		required = True,
+		dest = 'constraint_layer',
+		type = int,
+		help = "Layer to apply spatial constraint."
+	)
+config.parser.add_argument(
+		'--constraint-coeff',
+		required = True,
+		dest = 'constraint_coeff',
+		type = float,
+		help = "Coeffecient of constraint term."
+	)
 config.parse_args()
 
 import theano
@@ -14,7 +28,7 @@ import model
 import updates
 import cPickle as pickle
 from itertools import izip, chain
-
+import constraint
 theano_rng = T.shared_randomstreams.RandomStreams(np.random.RandomState(1234).randint(2**30))
 
 def corrupt(x,corr=0.2):
@@ -31,7 +45,7 @@ def reconstruct(corr_x,W,b,b_rec,input_layer):
 	recon  = T.dot(hidden,W.T) + b_rec
 	if not input_layer:
 		recon = config.hidden_activation(recon)
-	return recon
+	return recon,hidden
 
 def cost(x,recon_x,kl_divergence):
 	if not kl_divergence:
@@ -65,19 +79,27 @@ if __name__ == "__main__":
 		b = params["b_hidden_%d"%i]
 		b_rec = theano.shared(np.zeros((layer_sizes[i],),dtype=theano.config.floatX))
 
-
-		loss = cost(
-				layer,
-				reconstruct(
+		recon,hidden = reconstruct(
 					corrupt(layer),
 					W,b,b_rec,
 					input_layer = (layer.name == 'X')
-				),
+				)
+		loss = cost(
+				layer,recon,
 				kl_divergence = ((layer.name != 'X') and (config.hidden_activation == T.nnet.sigmoid))
 			)
+		if i + 1 == config.args.constraint_layer:
+			print "Constraint this layer."
+			loss += config.args.constraint_coeff * \
+								constraint.adjacency(hidden,32,32)
+
+
+
+
 		lr = 0.01 if i > 0 else 0.003
 		parameters = [W,b,b_rec]
 		gradients  = T.grad(loss,wrt=parameters)
+		print "Creating function for %d"%i
 		train = theano.function(
 				inputs = [start_idx,end_idx],
 				outputs = loss,

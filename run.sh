@@ -2,6 +2,8 @@
 TK_DIR=$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )
 [ -f $TK_DIR/path.sh ] && . $TK_DIR/path.sh
 
+
+
 # GMM model for alignments
 gmmdir=exp/tri3
 ali_dir=${gmmdir}_ali
@@ -61,43 +63,47 @@ nnet-forward $dir/feature_transform ark:- ark,t:- \
 num_pdfs=`gmm-info $gmmdir/final.mdl | grep pdfs | awk '{print $NF}'`
 input_dim=`copy-feats scp:$dir/data/train/feats.scp ark:- | eval $feat_transform | feat-to-dim ark:- -`
 structure="$input_dim:1024:1024:1024:1024:1024:1024:$num_pdfs"
-model_name=split
 
 frame_files=($dir/pkl/train.*.pklgz)
 label_files=($dir/pkl/train_lbl.*.pklgz)
-
-[ -f $dir/pretrain.pkl ] || \
-	python $TK_DIR/pretrain_sda.py\
-	--frames-files ${frame_files[@]:1} \
-	--labels-files ${label_files[@]:1} \
-	--structure $structure \
-	--output-file $dir/pretrain.pkl \
-	--minibatch 128 --max-epochs 20
-
-[ -f $dir/dnn.${model_name}.pkl ] || \
-	python $TK_DIR/train.py \
-	--frames-files			 ${frame_files[@]:1} \
-	--labels-files			 ${label_files[@]:1} \
-	--validation-frames-file ${frame_files[0]}   \
-	--validation-labels-file ${label_files[0]}   \
-	--structure $structure \
-	--pretrain-file $dir/pretrain.pkl \
-	--temporary-file $dir/tmp.dnn.${model_name}.pkl \
-	--output-file    $dir/dnn.${model_name}.pkl \
-	--minibatch 128 --max-epochs 200
-
-for set in dev test
+for layer in {1,3,4,5,6}
 do
+	model_name=constraint.$layer
+	[ -f $dir/pretrain.${model_name}.pkl ] || \
+		THEANO_FLAGS='device=gpu1' python $TK_DIR/pretrain_sda.py\
+		--frames-files ${frame_files[@]:1} \
+		--labels-files ${label_files[@]:1} \
+		--structure $structure \
+		--output-file $dir/pretrain.${model_name}.pkl \
+		--minibatch 128 --max-epochs 20 \
+		--constraint-layer $layer --constraint-coeff 0.0125
 
-	feats="copy-feats scp:$dir/data/$set/feats.scp ark:- \
-		| $feat_transform \
-		| python2 theano-kaldi/nnet_forward.py $structure $dir/dnn.${model_name}.pkl $dir/decode_${set}_${model_name}/class.counts"
+	[ -f $dir/dnn.${model_name}.pkl ] || \
+		THEANO_FLAGS='device=gpu1' python $TK_DIR/train.py \
+		--frames-files			 ${frame_files[@]:1} \
+		--labels-files			 ${label_files[@]:1} \
+		--validation-frames-file ${frame_files[0]}   \
+		--validation-labels-file ${label_files[0]}   \
+		--structure $structure \
+		--pretrain-file $dir/pretrain.${model_name}.pkl \
+		--temporary-file $dir/tmp.dnn.${model_name}.pkl \
+		--output-file    $dir/dnn.${model_name}.pkl \
+		--minibatch 128 --max-epochs 200 \
+		--constraint-layer $layer --constraint-coeff 0.0125
 
-	$TK_DIR/decode_dnn.sh --nj 1 \
-		--scoring-opts "--min-lmwt 1 --max-lmwt 8" \
-		--norm-vars true \
-		$gmmdir/graph $dir/data/${set}\
-		${gmmdir}_ali $dir/decode_${set}_${model_name}\
-		"$feats"
+	for set in dev test
+	do
 
+		feats="copy-feats scp:$dir/data/$set/feats.scp ark:- \
+			| $feat_transform \
+			| python2 theano-kaldi/nnet_forward.py $structure $dir/dnn.${model_name}.pkl $dir/decode_${set}_${model_name}/class.counts"
+
+		$TK_DIR/decode_dnn.sh --nj 1 \
+			--scoring-opts "--min-lmwt 1 --max-lmwt 8" \
+			--norm-vars true \
+			$gmmdir/graph $dir/data/${set}\
+			${gmmdir}_ali $dir/decode_${set}_${model_name}\
+			"$feats"
+
+	done
 done

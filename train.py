@@ -28,6 +28,22 @@ config.parser.add_argument(
 		type = str,
 		help = "Location to write intermediate models to."
 	)
+config.parser.add_argument(
+		'--constraint-layer',
+		required = True,
+		dest = 'constraint_layer',
+		type = int,
+		help = "Layer to apply spatial constraint."
+	)
+config.parser.add_argument(
+		'--constraint-coeff',
+		required = True,
+		dest = 'constraint_coeff',
+		type = float,
+		help = "Coeffecient of constraint term."
+	)
+
+
 config.parse_args()
 
 
@@ -45,6 +61,8 @@ import updates
 import cPickle as pickle
 from pprint import pprint
 from itertools import izip, chain
+
+import constraint
 
 if __name__ == "__main__":
 	frames_files = config.frames_files
@@ -65,7 +83,7 @@ if __name__ == "__main__":
 	end_idx = T.iscalar('end_idx')
 	lr = T.scalar('lr')
 
-	_,outputs = feedforward(X)
+	hiddens,outputs = feedforward(X)
 	X_shared = theano.shared(np.zeros((1,config.input_size),dtype=theano.config.floatX))
 	Y_shared = theano.shared(np.zeros((1,),dtype=np.int32))
 	if config.args.pretrain_file != None:
@@ -75,7 +93,10 @@ if __name__ == "__main__":
 					params[k].set_value(v)
 		model.save(config.args.temporary_file,params)
 
-		loss = cross_entropy = T.mean(T.nnet.categorical_crossentropy(outputs,Y))
+		cross_entropy = T.mean(T.nnet.categorical_crossentropy(outputs,Y))
+
+		loss = cross_entropy + config.args.constraint_coeff * \
+								constraint.adjacency(hiddens[config.args.constraint_layer],32,32)
 		parameters = params.values() 
 		print "Parameters to tune:"
 		pprint(parameters)
@@ -92,7 +113,7 @@ if __name__ == "__main__":
 			)
 		test = theano.function(
 				inputs = [X,Y],
-				outputs = [loss]  + [ T.mean(T.neq(T.argmax(outputs,axis=1),Y))]
+				outputs = [cross_entropy]  + [ T.mean(T.neq(T.argmax(outputs,axis=1),Y))]
 			)
 
 			#with open(config.args.pretrain_file,'rb') as f:
