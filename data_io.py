@@ -2,68 +2,114 @@ import gzip
 import cPickle as pickle
 import sys
 import numpy as np
+from itertools import izip
+def stream(*filenames,**kwargs):	
+	with_name = kwargs.get('with_name',False)
+	fds = [ gzip.open(f,'rb') for f in filenames ]
+	try:
+		while True:
+			items = [ pickle.load(fd) for fd in fds ]
+			assert(all(x[0]==items[0][0] for x in items))
+			# HACK. To remove.
+			result = tuple(
+					x[1] if hasattr(x[1],'shape') else np.array(x[1],dtype=np.int32)
+					for x in items
+				)
+			if with_name:
+				yield (items[0][0],) + result
+			else:
+				yield result
+	except EOFError:
+		pass
+	for fd in fds: fd.close()
 
-def stream(frame_file,label_file,with_name=False):
-	with gzip.open(frame_file,'rb') as feat_file,\
-		 gzip.open(label_file,'rb') as lbls_file:
-		try:
-			while True:
-				name1,feats = pickle.load(feat_file)
-				name2,lbls  = pickle.load(lbls_file)
-				assert(name1==name2)
-				assert(feats.shape[0] == len(lbls))
-				if with_name:
-					yield name1,feats,lbls
-				else:
-					yield feats,lbls
-		except EOFError:
-			pass
 
-
-def randomise(stream,buffer_size=2**16,limit=-1):
-	buf_feats = None
-	buf_labels = None
+def randomise(stream,buffer_size=2**17):
+	buf = None
 	buf_instances = 0
-	count = 0
+	for item in stream:
+		if buf == None:
+			buf = [
+					np.zeros((buffer_size,) + x.shape[1:],dtype=x.dtype)
+					for x in item 
+				]
+			def randomise_buffers():
+				idxs = np.arange(buf_instances)
+				np.random.shuffle(idxs)
+				rng_state = np.random.get_state()
+				for i in xrange(len(buf)):
+					np.random.set_state(rng_state)
+					np.random.shuffle(buf[i][:buf_instances])
 
-	for feats,lbls in stream:
-
-		if buf_feats == None:
-#			print "Initialise buffer",(buffer_size,feats.shape[1])
-			buf_feats  = np.zeros((buffer_size,feats.shape[1]),dtype=np.float32)
-			buf_labels = np.zeros((buffer_size,),dtype=np.int32)
-
-		if buf_instances + feats.shape[0] > buffer_size:
+		if buf_instances + item[0].shape[0] > buffer_size:
 #			print "Buffer size reached: ",buf_instances
 #			print "Shuffling...",
-			idxs = np.arange(buf_instances)
-			np.random.shuffle(idxs)
-			buf_feats[:buf_instances]  = buf_feats[idxs]
-			buf_labels[:buf_instances] = buf_labels[idxs]
-			yield buf_feats,buf_labels,buf_instances
+			randomise_buffers()
+			yield tuple(buf) + (buf_instances,)
 #			print "dispatched."
 			buf_instances = 0
 		else:
-			lbls = np.array(lbls,dtype=np.int32)
-			assert(feats.shape[0] == lbls.shape[0])
 #			print "Copying to buffer", (buf_instances,buf_instances+feats.shape[0])
-			buf_feats[buf_instances:buf_instances+feats.shape[0]]  = feats
-			buf_labels[buf_instances:buf_instances+feats.shape[0]] = lbls
-			buf_instances += feats.shape[0]
-
-			count += 1
-			if count == limit: break
+			for i in xrange(len(buf)):
+				buf[i][buf_instances:buf_instances+item[0].shape[0]] = item[i]
+			buf_instances += item[0].shape[0]
 		
-	if len(buf_feats) > 0:
-		idxs = np.arange(buf_instances)
-		np.random.shuffle(idxs)
-		buf_feats[:buf_instances]  = buf_feats[idxs]
-		buf_labels[:buf_instances] = buf_labels[idxs]
-		yield buf_feats,buf_labels,buf_instances
+	if len(buf[0]) > 0:
+		randomise_buffers()
+		yield tuple(buf) + (buf_instances,)
 
+import threading
+def randomise_threaded(stream,buffer_size=2**16):
+	class RunScope:
+		def __init__(self):
+			self.buf  = None
+			self.buf_tmp = None
+			self.done = False
+			self.buf_instances = 0
+		def loader_shuffler(self):
+			try:
+				self.buf_instances = 0
+				while True:
+					item = stream.next()
+					if self.buf == None:
+						self.buf = [ np.zeros((buffer_size,) + x.shape[1:],dtype=x.dtype)
+								for x in item ]
+						self.buf_tmp = [ np.zeros((buffer_size,) + x.shape[1:],dtype=x.dtype)
+								for x in item ]
+
+					if self.buf_instances + item[0].shape[0] < buffer_size:
+						for i in xrange(len(self.buf)):
+							self.buf[i][self.buf_instances:self.buf_instances+item[0].shape[0]] = item[i]
+						self.buf_instances += item[0].shape[0]
+					else:
+						break
+			except StopIteration:
+				self.done = True
+			idxs = np.arange(self.buf_instances)
+			np.random.shuffle(idxs)
+			for i in xrange(len(self.buf)): self.buf[i][:self.buf_instances]  = self.buf[i][idxs]
+	t = RunScope()
+	worker = threading.Thread(target=t.loader_shuffler)
+	worker.start()
+	while not t.done:
+		worker.join()
+		tmp_instance_count = t.buf_instances
+		t.buf,t.buf_tmp = t.buf_tmp,t.buf
+		if not t.done:
+			worker = threading.Thread(target=t.loader_shuffler)
+			worker.start()
+		yield tuple(t.buf_tmp) + (tmp_instance_count,)
 
 if __name__ == "__main__":
-	for f,l in randomise(sys.argv[1],sys.argv[2]):
-		print f.shape
-		print l.shape
+	import time
+	from itertools import chain
+	data_streams = [ stream("/home/shawn/kaldi-trunk-2/egs/timit/s5/exp/dnn_fbank_tk_feedforward/pkl/train.0%d.pklgz"%i) 
+			for i in xrange(10) ]
+	
+	randomised_stream = randomise_threaded(chain(*data_streams))
+	for value in randomised_stream:
+		print "begin sleeping"
+		time.sleep(1)
+		print "end sleeping"
+
 
