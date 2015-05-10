@@ -60,19 +60,11 @@ nnet-forward $dir/feature_transform ark:- ark,t:- \
 # Training of the nnet.
 num_pdfs=`gmm-info $gmmdir/final.mdl | grep pdfs | awk '{print $NF}'`
 input_dim=`copy-feats scp:$dir/data/train/feats.scp ark:- | eval $feat_transform | feat-to-dim ark:- -`
-structure="$input_dim:1024:1024:1024:1024:1024:1024:$num_pdfs"
-model_name=split
+structure="$input_dim:512:512:512:512:512:512:512:512:512:512:$num_pdfs"
+model_name=10x512-gated-negbias
 
 frame_files=($dir/pkl/train.*.pklgz)
 label_files=($dir/pkl/train_lbl.*.pklgz)
-
-[ -f $dir/pretrain.pkl ] || \
-	python $TK_DIR/pretrain_sda.py\
-	--frames-files ${frame_files[@]:1} \
-	--labels-files ${label_files[@]:1} \
-	--structure $structure \
-	--output-file $dir/pretrain.pkl \
-	--minibatch 128 --max-epochs 20
 
 [ -f $dir/dnn.${model_name}.pkl ] || \
 	python $TK_DIR/train.py \
@@ -81,7 +73,6 @@ label_files=($dir/pkl/train_lbl.*.pklgz)
 	--validation-frames-file ${frame_files[0]}   \
 	--validation-labels-file ${label_files[0]}   \
 	--structure $structure \
-	--pretrain-file $dir/pretrain.pkl \
 	--temporary-file $dir/tmp.dnn.${model_name}.pkl \
 	--output-file    $dir/dnn.${model_name}.pkl \
 	--minibatch 128 --max-epochs 200
@@ -91,7 +82,7 @@ do
 
 	feats="copy-feats scp:$dir/data/$set/feats.scp ark:- \
 		| $feat_transform \
-		| python2 theano-kaldi/nnet_forward.py $structure $dir/dnn.${model_name}.pkl $dir/decode_${set}_${model_name}/class.counts"
+		| python2 theano-kaldi-gated/nnet_forward.py $structure $dir/dnn.${model_name}.pkl $dir/decode_${set}_${model_name}/class.counts"
 
 	$TK_DIR/decode_dnn.sh --nj 1 \
 		--scoring-opts "--min-lmwt 1 --max-lmwt 8" \

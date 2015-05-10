@@ -16,7 +16,7 @@ def create_model(filename,counts,input_size,layer_sizes,output_size):
 	params = {}
 	predict = model.build_feedforward(params,input_size,layer_sizes,output_size)
 	model.load(filename,params)
-	_,output = predict(X)
+	_,_,output = predict(X)
 	f = theano.function(
 			inputs = [X],
 			outputs = T.log(output) - T.log(counts/T.sum(counts))
