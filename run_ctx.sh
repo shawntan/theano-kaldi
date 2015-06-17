@@ -83,22 +83,21 @@ do
 	do
 		for surface in norm
 		do
-#			for spread in {1.5,2.0,2.5}
-#			do
-				model_name=phoneme_gaussian_tsne_layer-${layer}_coeff-${ccoeff}-init_${surface}
-				#_spread-${spread}
+			for spread in {1.5,2.0,2.5}
+			do
+				model_name=ctx_phoneme_gaussian_tsne_layer-${layer}_coeff-${ccoeff}-init_${surface}_spread-${spread}
 				mkdir -p $dir/$model_name/
 				mkdir -p $dir/$model_name/pretrain_params
 				mkdir -p $dir/$model_name/log
-
+				ls $dir/$model_name/dnn.pkl
 				[ -f $dir/$model_name/dnn.pkl ] || \
-					python -u $TK_DIR/train_em.py \
+					python -u $TK_DIR/train_ctx.py \
 					--frames-files			 ${frame_files[@]:1}   \
 					--labels-files			 ${label_files[@]:1}   \
-					--phoneme-files			 ${phoneme_files[@]:1} \
+					--phoneme-files			 ${ctx_files[@]:1} \
 					--validation-frames-file ${frame_files[0]}     \
 					--validation-labels-file ${label_files[0]}     \
-					--validation-phonemes-file ${phoneme_files[0]}     \
+					--validation-phonemes-file ${ctx_files[0]}     \
 					--structure $structure \
 					--pretrain-file  $dir/pretrain.pkl \
 					--temporary-file $dir/$model_name/tmp.dnn.pkl  \
@@ -193,7 +192,7 @@ do
 						${gmmdir}_ali $dir/$model_name/decode_${set} \
 						"$feats"
 				done
-#			done
+			done
 		done
 	done
 done

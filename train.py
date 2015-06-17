@@ -22,19 +22,37 @@ config.parser.add_argument(
 		type = str,
 		help = ".pkl file containing pre-trained model"
 	)
+
 config.parser.add_argument(
 		'--temporary-file',
 		dest = 'temporary_file',
 		type = str,
 		help = "Location to write intermediate models to."
 	)
+
+config.parser.add_argument(
+		'--constraint-layer',
+		required = True,
+		dest = 'constraint_layer',
+		type = int,
+		help = "Layer to apply spatial constraint."
+	)
+config.parser.add_argument(
+		'--constraint-coeff',
+		required = True,
+		dest = 'constraint_coeff',
+		type = float,
+		help = "Coeffecient of constraint term."
+	)
+
+
 config.parse_args()
 
 
 
 import theano
 import theano.tensor as T
-
+import constraint
 import numpy as np
 import math
 import sys
@@ -46,13 +64,26 @@ import cPickle as pickle
 from pprint import pprint
 from itertools import izip, chain
 
+def normalise_weights(norm_size,weight_pairs):
+	result = []
+	for W,b in weight_pairs:
+		norm = T.sqrt(T.sum(W**2,axis=0) + b**2)
+		result.append((W,norm_size * W/norm))
+		result.append((b,norm_size * b/norm))
+	return result
+
+def norm(W):
+	return T.sqrt(T.sum(W**2,axis=1)).dimshuffle('x',0)
+
+
 if __name__ == "__main__":
 	frames_files = config.frames_files
 	labels_files = config.labels_files
 	print frames_files
 	val_frames_file = config.args.val_frames_file
 	val_labels_file = config.args.val_labels_file
-	
+	print val_frames_file
+	print val_labels_file
 	minibatch_size = config.minibatch
 
 	params = {}
@@ -65,7 +96,7 @@ if __name__ == "__main__":
 	end_idx = T.iscalar('end_idx')
 	lr = T.scalar('lr')
 
-	_,outputs = feedforward(X)
+	hiddens,outputs = feedforward(X)
 	X_shared = theano.shared(np.zeros((1,config.input_size),dtype=theano.config.floatX))
 	Y_shared = theano.shared(np.zeros((1,),dtype=np.int32))
 	if config.args.pretrain_file != None:
@@ -76,6 +107,31 @@ if __name__ == "__main__":
 		model.save(config.args.temporary_file,params)
 
 		loss = cross_entropy = T.mean(T.nnet.categorical_crossentropy(outputs,Y))
+		act_surface = hiddens[1:]
+		norms = [ norm(params["W_hidden_%d"%i]) for i in xrange(1,len(hiddens)-1) ]
+		act_surface = [ h * n for h,n in zip(act_surface[:-1],norms) ] + [hiddens[-1]]
+
+		constraint_params = {}
+		if config.args.constraint_layer != 0:
+			if config.args.constraint_layer != -1:
+				loss += config.args.constraint_coeff * \
+						constraint.gaussian_shape(
+								params = constraint_params,
+								name   = str(config.args.constraint_layer-1),
+								inputs = act_surface[config.args.constraint_layer-1],
+								rows = 32, cols = 32,
+								components = 4
+							)
+			else:
+				loss += config.args.constraint_coeff * \
+						sum(constraint.gaussian_shape(
+								params = constraint_params,
+								name   = str(i),
+								inputs = h,
+								rows = 32, cols = 32,
+								components = 4
+							) for i,h in enumerate(act_surface))
+
 		parameters = params.values() 
 		print "Parameters to tune:"
 		pprint(parameters)

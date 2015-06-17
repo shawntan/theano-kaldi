@@ -70,11 +70,6 @@ for f in $graphdir/HCLG.fst $data/feats.scp $alidir/tree; do
   [ ! -f $f ] && echo "$0: no such file $f" && exit 1;
 done
 
-# Generate state counts; will be used as prior
-$cmd $dir/log/class_count.log \
-  ali-to-pdf $alidir/final.mdl "ark:gunzip -c $alidir/ali.*.gz |" ark:- \| \
-    analyze-counts --binary=false ark:- $dir/class.counts || exit 1;
-
 ## Set up the features
 echo "$0: feature: splice(${splice_opts}) norm_vars(${norm_vars})"
 

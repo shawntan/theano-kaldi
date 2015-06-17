@@ -34,14 +34,16 @@ def build_feedforward(params,input_size=None,layer_sizes=None,output_size=None):
 	params[W_name] = theano.shared(np.zeros((layer_sizes[-1],output_size),dtype=theano.config.floatX),name=W_name)
 	params[b_name] = theano.shared(np.zeros((output_size,),dtype=theano.config.floatX),name=b_name)
 
-	def feedforward(X):
+	def feedforward(X,mask):
 		hidden_layers = [X]
 		for i in xrange(len(layer_sizes)):
 			layer = config.hidden_activation(
 				T.dot(hidden_layers[-1],params["W_hidden_%d"%i]) +\
 				params["b_hidden_%d"%i]
 			)
+			layer = layer * mask
 			layer.name = "hidden_%d"%i
+
 			hidden_layers.append(layer)
 		output = T.nnet.softmax(T.dot(hidden_layers[-1],params["W_output"]) + params["b_output"])
 		return hidden_layers,output

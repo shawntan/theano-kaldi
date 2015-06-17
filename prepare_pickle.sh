@@ -13,7 +13,6 @@ feat_transform=$6
 total_lines=$(wc -l <${feats_file})
 ((lines_per_file = (total_lines + num_jobs - 1) / num_jobs))
 
-
 # Create temporary directory
 tmp_dir=$(mktemp -d)
 mkdir -p $tmp_dir
@@ -27,11 +26,12 @@ echo "Creating alignments file."
 gunzip -c $( ls $ali_dir/ali.*.gz | sort -V ) \
 	| ali-to-pdf $ali_dir/final.mdl ark:- ark,t:- \
 	> $data_ali_file
+wc -l $data_ali_file
 echo "Filtering features file."
 cat $feats_file \
 	| grep -F -f <(cut -f1 -d' ' $data_ali_file ) \
 	> $data_feats_file
-
+wc -l $data_feats_file
 echo "Splitting and shuffling files."
 shuf --random-source=$log_dir/rand $data_ali_file   | split -d --lines=${lines_per_file} - "$tmp_dir/full.ali."
 shuf --random-source=$log_dir/rand $data_feats_file | split -d --lines=${lines_per_file} - "$tmp_dir/feats.scp."
