@@ -7,7 +7,7 @@ gmmdir=exp/tri3
 ali_dir=${gmmdir}_ali
 
 # Output folder
-dir=exp/dnn_fbank_tk_feedforward
+dir=exp/dnn_fbank_tk_feedforward_vae
 
 # Create directories
 [ -d $dir ]      || mkdir -p $dir
@@ -67,10 +67,10 @@ frame_files=($dir/pkl/train.*.pklgz)
 label_files=($dir/pkl/train_lbl.*.pklgz)
 
 [ -f $dir/pretrain.pkl ] || \
-	python $TK_DIR/pretrain_sda.py\
+	python $TK_DIR/pretrain_vae.py\
 	--frames-files ${frame_files[@]:1} \
 	--labels-files ${label_files[@]:1} \
-	--structure $structure \
+	--structure "$input_dim:1024:1024:1024:512" \
 	--output-file $dir/pretrain.pkl \
 	--minibatch 128 --max-epochs 20
 
