@@ -31,13 +31,13 @@ if __name__ == "__main__":
 	P = Parameters()
 	X = T.matrix('X')
 	print config.layer_sizes
-	encode_decode = vae.build(P, "vae",
+	_, recon_error = vae.build(P, "vae",
 				config.input_size,
 				config.layer_sizes,
 				config.output_size,
 				activation=T.nnet.sigmoid
 			)
-	_,_,_,cost = encode_decode(X)
+	_,cost = recon_error(X)
 	
 	start_idx = T.iscalar('start_idx')
 	end_idx = T.iscalar('end_idx')
@@ -47,6 +47,7 @@ if __name__ == "__main__":
 	parameters = P.values()
 	gradients  = T.grad(cost,wrt=parameters)
 	pprint(sorted((p.name,p.get_value().shape)for p in parameters ))
+	print "Compiling function...",
 	train = theano.function(
 			inputs = [start_idx,end_idx],
 			outputs = cost,
@@ -55,6 +56,7 @@ if __name__ == "__main__":
 				X: X_shared[start_idx:end_idx],
 			}
 		)
+	print "Done."
 
 	for epoch in xrange(config.max_epochs):	
 		split_streams = [ data_io.stream(f) for f in frames_files ]
@@ -67,7 +69,9 @@ if __name__ == "__main__":
 			for idx in xrange(batch_count):
 				start = idx*minibatch_size
 				end = min((idx+1)*minibatch_size,size)
-				total_loss  += train(start,end)
+				loss = train(start,end)
+				#print loss
+				total_loss  += loss
 				total_count += 1
 		print total_loss/total_count
 	P.save(config.output_file)

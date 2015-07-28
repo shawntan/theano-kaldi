@@ -5,24 +5,15 @@ import math
 import cPickle as pickle
 import config
 
-def initial_weights(input_size,output_size,factor=4):
-	return np.asarray(
-		np.random.uniform(
-			low  = -factor * np.sqrt(6. / (input_size + output_size)),
-			high =  factor * np.sqrt(6. / (input_size + output_size)),
-			size =  (input_size,output_size)
-		),
-		dtype=theano.config.floatX
-	)
-
-def build_feedforward(params,input_size=None,layer_sizes=None,output_size=None):
+from theano_toolkit import utils as U
+def build(P,
+		input_size=None,
+		vae_layer_sizes=None,
+		output_size=None):
 	input_size = input_size or config.input_size
 	layer_sizes = layer_sizes or config.layer_sizes
 	output_size = output_size or config.output_size
-
 	prev_layer_size = input_size
-#	factor = 4 if config.hidden_activation == T.nnet.sigmoid else 1
-#	factor = 1
 	for i,curr_size in enumerate(layer_sizes):
 		W_name = "W_hidden_%d"%i 
 		b_name = "b_hidden_%d"%i
