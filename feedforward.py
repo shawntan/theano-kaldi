@@ -6,6 +6,13 @@ from theano_toolkit.parameters import Parameters
 
 
 def initial_weights(input_size,output_size,factor=4):
+#	return (
+#			 0.01 * np.random.randn(input_size,output_size)
+#		).astype(np.float32)
+
+#	return (
+#			0.05 * ( 2 * np.random.rand(input_size,output_size) - 1.0)
+#		).astype(np.float32)
     return np.asarray(
         np.random.uniform(
             low  = -factor * np.sqrt(6. / (input_size + output_size)),
@@ -17,14 +24,13 @@ def initial_weights(input_size,output_size,factor=4):
 
 def build(P, name,
           input_size, hidden_sizes, output_size,
-          activation=T.tanh):
+          activation=T.tanh,
+		  initial_weights=initial_weights):
 
     hidden_weights = []
     prev_size = input_size
     for i,size in enumerate(hidden_sizes):
-        P["W_%s_hidden_%d" % (name, i)] = initial_weights(
-				prev_size, size,
-			)
+        P["W_%s_hidden_%d" % (name, i)] = initial_weights(prev_size, size)
         P["b_%s_hidden_%d" % (name, i)] = np.zeros((size,), dtype=np.float32)
         hidden_weights.append((P["W_%s_hidden_%d" % (name, i)], P["b_%s_hidden_%d" % (name, i)]))
         prev_size = size

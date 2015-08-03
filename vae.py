@@ -4,6 +4,11 @@ import numpy as np
 from theano_toolkit import utils as U
 
 import feedforward
+def initial_weights(input_size,output_size,factor=4):
+    return (
+             0.1 * np.random.randn(input_size,output_size)
+        #    0.1 * ( 2 * np.random.rand(input_size,output_size) - 1.0)
+        ).astype(np.float32)
 
 
 def build(P, name,
@@ -11,19 +16,20 @@ def build(P, name,
           encoder_hidden_sizes,
           latent_size,
           decoder_hidden_sizes=None,
-          activation=T.tanh):
+          activation=T.tanh,
+          initial_weights=initial_weights):
 
     if decoder_hidden_sizes == None:
         decoder_hidden_sizes = encoder_hidden_sizes[::-1]
 
     encode = feedforward.build(P, "%s_encoder" % name,
                                 input_size, encoder_hidden_sizes, latent_size * 2,
-                                activation=activation
+                                activation=activation,
                                 )
 
     decode = feedforward.build(P, "%s_decoder" % name,
-                                latent_size, decoder_hidden_sizes, input_size,
-                                activation=activation
+                                latent_size, decoder_hidden_sizes, input_size * 2,
+                                activation=activation,
                                 )
     def sample_encode(X):
         mean_logvar = encode(X)
@@ -34,12 +40,19 @@ def build(P, name,
 
         return mean, logvar, latent
 
-    def recon_error(X):
-        mean,logvar,latent = sample_encode(X)
-        recon_X = decode(latent)
-        cost = -(
-            0.5 * T.sum(1 + logvar - mean**2 - T.exp(logvar), axis=1) +\
-            -0.5 * T.sum((recon_X - X)**2, axis=1)
-		)
-        return recon_X, T.mean(cost)
+    def recon_error(X,encoder_out=None):
+        if encoder_out:
+            mean,logvar,latent = encoder_out
+        else:
+            mean,logvar,latent = sample_encode(X)
+
+
+        recon_X_mean_logvar = decode(latent)
+        recon_X_mean   = recon_X_mean_logvar[:,:input_size]
+        recon_X_logvar = recon_X_mean_logvar[:,input_size:]
+
+        kl_divergence = -0.5 * T.sum(1 + logvar - mean**2 - T.exp(logvar), axis=1)
+        log_p_x_z = - 0.5 * T.sum(recon_X_logvar+(X - recon_X_mean)**2/T.exp(recon_X_logvar),axis=1)
+        cost = -(-kl_divergence + log_p_x_z)
+        return recon_X_mean, T.mean(cost)
     return sample_encode,recon_error
