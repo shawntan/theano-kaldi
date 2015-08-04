@@ -1,33 +1,17 @@
 import config
 config.parser.description = "theano-kaldi script for fine-tuning DNN feed-forward models."
-config.parser.add_argument(
-		'--validation-frames-file',
-		dest = 'val_frames_file',
-		required = True,
-		type = str,
-		help = ".pklgz file containing pickled (name,frames) pairs for training"
-	)
+config.file_sequence("frames_files",".pklgz file containing audio frames.")
+config.file_sequence("labels_files",".pklgz file containing frames labels.")
+config.structure("generative_structure","Structure of generative model.")
+config.structure("discriminative_structure","Structure of discriminative model.")
+config.file("generative_model",".pkl file containing generative model")
+config.file("validation_frames_file","Validation set frames file.")
+config.file("validation_labels_file","Validation set labels file.")
+config.file("output_file","Output file.")
+config.file("temporary_file","Temporary file.")
+config.integer("minibatch","Minibatch size.",default=128)
+config.integer("max_epochs","Maximum number of epochs to train.",default=200)
 
-config.parser.add_argument(
-		'--validation-labels-file',
-		dest = 'val_labels_file',
-		required = True,
-		type = str,
-		help = ".pklgz file containing pickled (name,frames) pairs for training"
-	)
-
-config.parser.add_argument(
-		'--pretrain-file',
-		dest = 'pretrain_file',
-		type = str,
-		help = ".pkl file containing pre-trained model"
-	)
-config.parser.add_argument(
-		'--temporary-file',
-		dest = 'temporary_file',
-		type = str,
-		help = "Location to write intermediate models to."
-	)
 config.parse_args()
 
 
@@ -51,11 +35,20 @@ from theano_toolkit.parameters import Parameters
 import vae,feedforward
 if __name__ == "__main__":
 
-	frames_files = config.frames_files
-	labels_files = config.labels_files
-	val_frames_file = config.args.val_frames_file
-	val_labels_file = config.args.val_labels_file
-	minibatch_size = config.minibatch
+	frames_files = config.args.frames_files
+	labels_files = config.args.labels_files
+	val_frames_file = config.args.validation_frames_file
+	val_labels_file = config.args.validation_labels_file
+	minibatch_size = config.args.minibatch
+	
+	gen_input_size  = config.args.generative_structure[0]
+	gen_layer_sizes = config.args.generative_structure[1:-1]
+	gen_output_size = config.args.generative_structure[-1]
+	dis_input_size  = config.args.discriminative_structure[0]
+	dis_layer_sizes = config.args.discriminative_structure[1:-1]
+	dis_output_size = config.args.discriminative_structure[-1]
+	
+	assert(gen_output_size == dis_input_size)
 
 	X = T.matrix('X')
 	Y = T.ivector('Y')
@@ -63,7 +56,7 @@ if __name__ == "__main__":
 	end_idx = T.iscalar('end_idx')
 	lr = T.scalar('lr')
 
-	X_shared = theano.shared(np.zeros((1,config.input_size),dtype=theano.config.floatX))
+	X_shared = theano.shared(np.zeros((1,gen_input_size),dtype=theano.config.floatX))
 	Y_shared = theano.shared(np.zeros((1,),dtype=np.int32))
 
 	def run_test(test):
@@ -98,29 +91,27 @@ if __name__ == "__main__":
 
 	P_vae  = Parameters()
 	sample_encode, recon_error = vae.build(P_vae, "vae",
-				config.input_size,
-				config.layer_sizes[:len(config.layer_sizes)/2],
-				512,
+				gen_input_size,
+				gen_layer_sizes,
+				gen_output_size,
 				activation=T.nnet.sigmoid
 			)
+
 	mean, logvar, latent = sample_encode(X)
-	if config.args.pretrain_file != None:
-		P_vae.load(config.args.pretrain_file)
+	P_vae.load(config.args.generative_model)
 
 	learning_rate = 1e-5
+	best_score = np.inf
 
-
-	disc_layers = config.layer_sizes[len(config.layer_sizes)/2:]
 	prev_P_disc = None
-
-	for layer in xrange(len(disc_layers)):
+	for layer in xrange(len(dis_layer_sizes)):
 		P_disc = Parameters()
 		discriminate = feedforward.build(
 			P_disc,
 			name = "discriminate",
-			input_size = 512, 
-			hidden_sizes = disc_layers[:layer+1],
-			output_size = config.output_size,
+			input_size   = dis_input_size, 
+			hidden_sizes = dis_layer_sizes[:layer+1],
+			output_size  = dis_output_size,
 			activation=T.nnet.sigmoid
 		)
 		lin_output = discriminate(latent)
@@ -158,36 +149,43 @@ if __name__ == "__main__":
 				inputs = [X,Y],
 				outputs = [cross_entropy]  + [ T.mean(T.neq(T.argmax(outputs,axis=1),Y))]
 			)
-		
+
+
+		P_disc.save(config.args.temporary_file)
+		best_score = np.inf
 		for _ in xrange(5):
 			run_train(train,learning_rate)
 			cost,errors = run_test(test)
-			print cost,errors
-			prev_P_disc = P_disc
+			print cost,errors,
+
+			if cost < best_score:
+				best_score = cost
+				P_disc.save(config.args.temporary_file)
+				print "Saved."
+			else:
+				print
+		P_disc.load(config.args.temporary_file)
+		prev_P_disc = P_disc
 
 
-
-
-
-	best_score = np.inf
-	for epoch in xrange(config.max_epochs):
+	for epoch in xrange(config.args.max_epochs-1):
 		cost, errors = run_test(test)
-		print cost, errors
+		print cost, errors,
 		_best_score = best_score
 
 		if cost < _best_score:
 			best_score = cost
 			P_disc.save(config.args.temporary_file)
+			print "Saved."
+		else:
+			print
 
 		if cost/_best_score > 0.995:
 			learning_rate *= 0.5
 			P_disc.load(config.args.temporary_file)
 
 		if learning_rate < 1e-10: break
+
 		print "Learning rate is now",learning_rate
-
 		run_train(train,learning_rate)
-
-
-	P_disc.load(config.args.temporary_file)
-	P_disc.save(config.output_file)
+	P_disc.save(config.args.output_file)

@@ -114,10 +114,10 @@ if __name__ == "__main__":
 		print "Done."
 		for _ in xrange(5):
 			train_epoch(train)
-			test_validation(test)
+			print test_validation(test)
 		prev_P = P
 
-	for epoch in xrange(config.args.max_epochs):
+	for epoch in xrange(config.args.max_epochs-5):
 		train_epoch(train)
-		test_validation(test)
+		print test_validation(test)
 	P.save(config.args.output_file)

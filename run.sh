@@ -74,39 +74,49 @@ label_files=($dir/pkl/train_lbl.*.pklgz)
 #	--minibatch 128 --max-epochs 5
 
 
-#[ -f $dir/pretrain.pkl ] || \
+[ -f $dir/pretrain.pkl ] || \
 	python -u $TK_DIR/pretrain_vae.py\
 	--frames-files ${frame_files[@]:1} \
 	--generative-structure "$input_dim:1024:512" \
 	--validation-frames-file ${frame_files[0]}   \
 	--output-file $dir/pretrain.pkl \
-	--minibatch 128 --max-epochs 20
+	--minibatch 128 --max-epochs 5
 
 
-[ -f $dir/dnn.${model_name}.pkl ] || \
+#[ -f $dir/dnn.${model_name}.pkl ] || \
 	python -u $TK_DIR/train.py \
 	--frames-files			 ${frame_files[@]:1} \
 	--labels-files			 ${label_files[@]:1} \
 	--validation-frames-file ${frame_files[0]}   \
 	--validation-labels-file ${label_files[0]}   \
-	--pretrain-file $dir/pretrain.pkl \
-	--structure $structure \
+	--generative-model  $dir/pretrain.pkl \
+	--generative-structure "$input_dim:1024:512" \
+	--discriminative-structure "512:1024:1024:1024:1024:$num_pdfs" \
 	--temporary-file $dir/tmp.dnn.${model_name}.pkl \
 	--output-file    $dir/dnn.${model_name}.pkl \
 	--minibatch 128 --max-epochs 200
 
 for set in dev test
 do
+	for sample in {1,5}
+	do
+		python_posteriors="THEANO_FLAGS=device=gpu0 \
+			python $TK_DIR/nnet_forward.py \
+			--generative-structure		'$input_dim:1024:512' \
+			--discriminative-structure	'512:1024:1024:1024:$num_pdfs' \
+			--generative-model		'$dir/pretrain.pkl' \
+			--discriminative-model	'$dir/dnn.${model_name}.pkl' \
+			--class-counts			'$dir/decode_${set}_${model_name}/class.counts'"
 
-	feats="copy-feats scp:$dir/data/$set/feats.scp ark:- \
-		| $feat_transform \
-		| THEANO_FLAGS=device=gpu0 python $TK_DIR/nnet_forward.py $structure $dir/pretrain.pkl,$dir/dnn.${model_name}.pkl $dir/decode_${set}_${model_name}/class.counts"
+		feats="copy-feats scp:$dir/data/$set/feats.scp ark:- \
+			| $feat_transform \
+			| $python_posteriors"
 
-	$TK_DIR/decode_dnn.sh --nj 1 \
-		--scoring-opts "--min-lmwt 1 --max-lmwt 8" \
-		--norm-vars true \
-		$gmmdir/graph $dir/data/${set}\
-		${gmmdir}_ali $dir/decode_${set}_${model_name}_fix\
-		"$feats"
-
+		$TK_DIR/decode_dnn.sh --nj 1 \
+			--scoring-opts "--min-lmwt 1 --max-lmwt 8" \
+			--norm-vars true \
+			$gmmdir/graph $dir/data/${set}\
+			${gmmdir}_ali $dir/decode_${set}_${model_name}_sample_${sample}\
+			"$feats"
+	done
 done
