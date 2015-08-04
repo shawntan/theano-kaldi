@@ -60,7 +60,8 @@ nnet-forward $dir/feature_transform ark:- ark,t:- \
 # Training of the nnet.
 num_pdfs=`gmm-info $gmmdir/final.mdl | grep pdfs | awk '{print $NF}'`
 input_dim=`copy-feats scp:$dir/data/train/feats.scp ark:- | eval $feat_transform | feat-to-dim ark:- -`
-structure="$input_dim:1024:1024:1024:1024:1024:1024:$num_pdfs"
+gen_structure="$input_dim:1024:512"
+dis_structure="512:1024:1024:1024:1024:$num_pdfs"
 model_name=split
 
 frame_files=($dir/pkl/train.*.pklgz)
@@ -77,21 +78,21 @@ label_files=($dir/pkl/train_lbl.*.pklgz)
 [ -f $dir/pretrain.pkl ] || \
 	python -u $TK_DIR/pretrain_vae.py\
 	--frames-files ${frame_files[@]:1} \
-	--generative-structure "$input_dim:1024:512" \
+	--generative-structure $gen_structure \
 	--validation-frames-file ${frame_files[0]}   \
 	--output-file $dir/pretrain.pkl \
 	--minibatch 128 --max-epochs 5
 
 
-#[ -f $dir/dnn.${model_name}.pkl ] || \
+[ -f $dir/dnn.${model_name}.pkl ] || \
 	python -u $TK_DIR/train.py \
 	--frames-files			 ${frame_files[@]:1} \
 	--labels-files			 ${label_files[@]:1} \
 	--validation-frames-file ${frame_files[0]}   \
 	--validation-labels-file ${label_files[0]}   \
 	--generative-model  $dir/pretrain.pkl \
-	--generative-structure "$input_dim:1024:512" \
-	--discriminative-structure "512:1024:1024:1024:1024:$num_pdfs" \
+	--generative-structure		$gen_structure \
+	--discriminative-structure	$dis_structure \
 	--temporary-file $dir/tmp.dnn.${model_name}.pkl \
 	--output-file    $dir/dnn.${model_name}.pkl \
 	--minibatch 128 --max-epochs 200
@@ -102,8 +103,8 @@ do
 	do
 		python_posteriors="THEANO_FLAGS=device=gpu0 \
 			python $TK_DIR/nnet_forward.py \
-			--generative-structure		'$input_dim:1024:512' \
-			--discriminative-structure	'512:1024:1024:1024:$num_pdfs' \
+			--generative-structure		'$gen_structure' \
+			--discriminative-structure	'$dis_structure' \
 			--generative-model		'$dir/pretrain.pkl' \
 			--discriminative-model	'$dir/dnn.${model_name}.pkl' \
 			--class-counts			'$dir/decode_${set}_${model_name}/class.counts'"

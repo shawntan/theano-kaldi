@@ -188,4 +188,5 @@ if __name__ == "__main__":
 
 		print "Learning rate is now",learning_rate
 		run_train(train,learning_rate)
+	P_disc.load(config.args.temporary_file)
 	P_disc.save(config.args.output_file)
