@@ -50,11 +50,19 @@ add-deltas --delta-order=$(cat $dir/delta_order) ark:- ark:- |\
 splice-feats $splice_opts ark:- ark:- |\
 nnet-forward $dir/feature_transform ark:- ark,t:- \
 "
-[ -f $dir/pkl/train.00.pklgz ] || time $TK_DIR/prepare_pickle.sh $num_jobs \
-	$dir/data/train/feats.scp \
+[ -f $dir/pkl/train.00.pklgz ] || \
+	time $TK_DIR/prepare_pickle.sh $num_jobs \
+	$dir/data/train \
 	$ali_dir \
 	$dir/pkl/train \
-	$dir/_log/split \
+	$dir/_log/split_train \
+	"$feat_transform" || exit 1;
+[ -f $dir/pkl/test.00.pklgz ] || \
+	time $TK_DIR/prepare_pickle.sh $num_jobs \
+	$dir/data/test \
+	$ali_dir \
+	$dir/pkl/test \
+	$dir/_log/split_test \
 	"$feat_transform" || exit 1;
 
 # Training of the nnet.
@@ -74,6 +82,32 @@ label_files=($dir/pkl/train_lbl.*.pklgz)
 #	--output-file $dir/pretrain.pkl \
 #	--minibatch 128 --max-epochs 5
 
+#[ -f $dir/generative_sa.pkl ] || \
+	python -u $TK_DIR/train_sa_vae.py \
+	--frames-files ${frame_files[@]} \
+	--generative-structure $gen_structure \
+	--validation-frames-file $dir/pkl/gen_val.pklgz   \
+	--output-file  $dir/generative_sa.pkl \
+	--spk2utt-file $dir/data/train/spk2utt \
+	--minibatch 256 --max-epochs 20
+
+#[ -f $dir/discriminative_sa.pkl ] || \
+	python -u $TK_DIR/train_sa.py \
+	--frames-files				${frame_files[@]:1} \
+	--labels-files				${label_files[@]:1} \
+	--validation-frames-file	${frame_files[0]}   \
+	--validation-labels-file	${label_files[0]}   \
+	--generative-model			$dir/generative_sa.pkl \
+	--generative-structure		$gen_structure \
+	--discriminative-structure	$dis_structure \
+	--temporary-file $dir/tmp.discriminative_sa.pkl \
+	--output-file    $dir/discriminative_sa.pkl \
+	--spk2utt-file $dir/data/train/spk2utt \
+	--minibatch 128 --max-epochs 200
+
+exit 0
+
+exp/dnn_fbank_tk_feedforward_vae/data/train/spk2utt
 
 [ -f $dir/pretrain.pkl ] || \
 	python -u $TK_DIR/pretrain_vae.py\
