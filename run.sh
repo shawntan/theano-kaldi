@@ -57,6 +57,7 @@ nnet-forward $dir/feature_transform ark:- ark,t:- \
 	$dir/pkl/train \
 	$dir/_log/split_train \
 	"$feat_transform" || exit 1;
+
 [ -f $dir/pkl/test.00.pklgz ] || \
 	time $TK_DIR/prepare_pickle.sh $num_jobs \
 	$dir/data/test \
@@ -64,6 +65,15 @@ nnet-forward $dir/feature_transform ark:- ark,t:- \
 	$dir/pkl/test \
 	$dir/_log/split_test \
 	"$feat_transform" || exit 1;
+
+[ -f $dir/pkl/dev.00.pklgz ] || \
+	time $TK_DIR/prepare_pickle.sh $num_jobs \
+	$dir/data/dev \
+	$ali_dir \
+	$dir/pkl/dev \
+	$dir/_log/split_dev \
+	"$feat_transform" || exit 1;
+
 
 # Training of the nnet.
 num_pdfs=`gmm-info $gmmdir/final.mdl | grep pdfs | awk '{print $NF}'`
@@ -82,7 +92,7 @@ label_files=($dir/pkl/train_lbl.*.pklgz)
 #	--output-file $dir/pretrain.pkl \
 #	--minibatch 128 --max-epochs 5
 
-#[ -f $dir/generative_sa.pkl ] || \
+[ -f $dir/generative_sa.pkl ] || \
 	python -u $TK_DIR/train_sa_vae.py \
 	--frames-files ${frame_files[@]} \
 	--generative-structure $gen_structure \
@@ -91,13 +101,24 @@ label_files=($dir/pkl/train_lbl.*.pklgz)
 	--spk2utt-file $dir/data/train/spk2utt \
 	--minibatch 256 --max-epochs 20
 
-#[ -f $dir/discriminative_sa.pkl ] || \
+[ -f $dir/generative_sa_train.pkl ] || \
+	python -u $TK_DIR/adapt_sa_vae.py \
+	--frames-files			$dir/pkl/train.*.pklgz \
+	--generative-structure	$gen_structure \
+	--validation-frames-file $dir/pkl/gen_val_train.pklgz   \
+	--generative-model $dir/generative_sa.pkl \
+	--output-file  $dir/generative_sa_train.pkl \
+	--spk2utt-file $dir/data/train/spk2utt \
+	--minibatch 256 --max-epochs 20
+
+
+[ -f $dir/discriminative_sa.pkl ] || \
 	python -u $TK_DIR/train_sa.py \
 	--frames-files				${frame_files[@]:1} \
 	--labels-files				${label_files[@]:1} \
 	--validation-frames-file	${frame_files[0]}   \
 	--validation-labels-file	${label_files[0]}   \
-	--generative-model			$dir/generative_sa.pkl \
+	--generative-model			$dir/generative_sa_train.pkl \
 	--generative-structure		$gen_structure \
 	--discriminative-structure	$dis_structure \
 	--temporary-file $dir/tmp.discriminative_sa.pkl \
@@ -105,42 +126,29 @@ label_files=($dir/pkl/train_lbl.*.pklgz)
 	--spk2utt-file $dir/data/train/spk2utt \
 	--minibatch 128 --max-epochs 200
 
-exit 0
 
-exp/dnn_fbank_tk_feedforward_vae/data/train/spk2utt
+[ -f $dir/generative_sa_dev.pkl ] || \
+	python -u $TK_DIR/adapt_sa_vae.py \
+	--frames-files			$dir/pkl/dev.*.pklgz \
+	--generative-structure	$gen_structure \
+	--validation-frames-file $dir/pkl/gen_val_dev.pklgz   \
+	--generative-model $dir/generative_sa.pkl \
+	--output-file  $dir/generative_sa_dev.pkl \
+	--spk2utt-file $dir/data/dev/spk2utt \
+	--minibatch 256 --max-epochs 20
 
-[ -f $dir/pretrain.pkl ] || \
-	python -u $TK_DIR/pretrain_vae.py\
-	--frames-files ${frame_files[@]:1} \
-	--generative-structure $gen_structure \
-	--validation-frames-file ${frame_files[0]}   \
-	--output-file $dir/pretrain.pkl \
-	--minibatch 128 --max-epochs 5
 
-
-[ -f $dir/dnn.${model_name}.pkl ] || \
-	python -u $TK_DIR/train.py \
-	--frames-files			 ${frame_files[@]:1} \
-	--labels-files			 ${label_files[@]:1} \
-	--validation-frames-file ${frame_files[0]}   \
-	--validation-labels-file ${label_files[0]}   \
-	--generative-model  $dir/pretrain.pkl \
-	--generative-structure		$gen_structure \
-	--discriminative-structure	$dis_structure \
-	--temporary-file $dir/tmp.dnn.${model_name}.pkl \
-	--output-file    $dir/dnn.${model_name}.pkl \
-	--minibatch 128 --max-epochs 200
-
-for set in dev test
+for set in dev
 do
-	for sample in {1,5}
+	for sample in 1
 	do
 		python_posteriors="THEANO_FLAGS=device=gpu0 \
-			python $TK_DIR/nnet_forward.py \
+			python $TK_DIR/nnet_forward_sa.py \
 			--generative-structure		'$gen_structure' \
 			--discriminative-structure	'$dis_structure' \
-			--generative-model		'$dir/pretrain.pkl' \
-			--discriminative-model	'$dir/dnn.${model_name}.pkl' \
+			--generative-model		'$dir/generative_sa_${set}.pkl' \
+			--discriminative-model	'$dir/discriminative_sa.pkl' \
+			--spk2utt-file 			'$dir/data/$set/spk2utt' \
 			--class-counts			'$dir/decode_${set}_${model_name}/class.counts'"
 
 		feats="copy-feats scp:$dir/data/$set/feats.scp ark:- \
@@ -151,7 +159,7 @@ do
 			--scoring-opts "--min-lmwt 1 --max-lmwt 8" \
 			--norm-vars true \
 			$gmmdir/graph $dir/data/${set}\
-			${gmmdir}_ali $dir/decode_${set}_${model_name}_sample_${sample}\
+			${gmmdir}_ali $dir/decode_${set}_sa\
 			"$feats"
 	done
 done

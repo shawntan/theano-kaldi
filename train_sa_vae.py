@@ -72,8 +72,10 @@ def speaker_grouped_stream(frames_files):
 
 def randomised_speaker_groups(grouped_stream,speaker_ids,
 		buffer_size=2**17,
-		validation_set=config.args.validation_frames_file,
+		validation_set=None,
 		validation_utt_count=1):
+	if validation_set == None:
+		validation_set = config.args.validation_frames_file
 	import gzip,os
 	frames_buf = None
 	speakers_buf = None
@@ -216,9 +218,17 @@ if __name__ == "__main__":
 				outputs = [T.mean(T.sum((X-X_recon)**2,axis=1)),cost],
 			)
 		print "Done."
+		best_score = np.inf
 		for _ in xrange(config.args.max_epochs):
 			train_epoch(train)
-			print test_validation(test)
+			scores = test_validation(test)
+			print scores,
+			score = scores[-1]
+			if score < best_score:
+				best_score = score
+				P.save(config.args.output_file)
+				print "Saved."
+			else:
+				print
 		prev_P = P
 
-	P.save(config.args.output_file)
