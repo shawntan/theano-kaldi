@@ -35,17 +35,7 @@ import random
 from theano_toolkit.parameters import Parameters
 import vae_sa,feedforward
 from train_sa_vae import get_speaker_ids, frame_speaker_stream
-
-def utterance_random_stream(frames_files,labels_files):
-	streams = [ data_io.stream(f,l,with_name=True) for f,l in zip(frames_files,labels_files) ]
-	while len(streams) > 0:
-		stream_idx = random.randint(0,len(streams)-1)
-		try:
-			yield streams[stream_idx].next()
-		except StopIteration:
-			streams = streams[:stream_idx] + streams[stream_idx+1:]
-
-
+from sa_io import *
 if __name__ == "__main__":
 
 	frames_files = config.args.frames_files

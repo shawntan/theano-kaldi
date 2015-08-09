@@ -116,7 +116,10 @@ if __name__ == "__main__":
 			outputs = [T.mean(T.sum((X-X_recon)**2,axis=1)),cost],
 		)
 	print "Done."
-	best_score = np.inf
+	scores = test_validation(test)
+	print scores
+	score = scores[-1]
+	best_score = score
 	for _ in xrange(config.args.max_epochs):
 		train_epoch(train)
 		scores = test_validation(test)
