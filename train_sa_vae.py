@@ -98,7 +98,7 @@ if __name__ == "__main__":
 	def create_trainer(params,grads):
 		return theano.function(
 				inputs = [start_idx,end_idx,lr],
-				updates = updates.adadelta(params,grads,eps=lr),
+				updates = updates.adadelta(params,grads,learning_rate=lr),
 				givens  = {
 					X: X_shared[start_idx:end_idx],
 					S: S_shared[start_idx:end_idx],
@@ -128,7 +128,7 @@ if __name__ == "__main__":
 
 
 
-	learning_rate = 1e-5
+	learning_rate = 1e-6
 	train_epoch(train_all,speaker_stream(),learning_rate)
 	scores = test_validation(test)
 	print "All training:", scores
@@ -149,6 +149,6 @@ if __name__ == "__main__":
 		else:
 			print
 
-		learning_rate = max(0.5 * learning_rate,1e-8)
+		learning_rate = max(0.5 * learning_rate,1e-9)
 		print "Learning rate:",learning_rate
 

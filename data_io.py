@@ -3,6 +3,7 @@ import cPickle as pickle
 import sys
 import numpy as np
 from itertools import izip
+import random
 def stream(*filenames,**kwargs):	
 	with_name = kwargs.get('with_name',False)
 	fds = [ gzip.open(f,'rb') for f in filenames ]
@@ -23,6 +24,21 @@ def stream(*filenames,**kwargs):
 		pass
 	for fd in fds: fd.close()
 
+def buffered_random(stream,buffer_items=20 * 8):
+	item_buffer = [None] * buffer_items
+	item_count = 0
+	for item in stream:
+		item_buffer[item_count] = item
+		item_count += 1
+		
+		if buffer_items == item_count:
+			random.shuffle(item_buffer)
+			for item in item_buffer: yield item
+			item_count = 0
+	if item_count > 0:
+		item_buffer = item_buffer[:item_count]
+		random.shuffle(item_buffer)
+		for item in item_buffer: yield item
 
 def randomise(stream,buffer_size=2**17):
 	buf = None

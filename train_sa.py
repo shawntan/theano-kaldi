@@ -85,6 +85,7 @@ if __name__ == "__main__":
 
 	def run_train(train,learning_rate):
 		stream = utterance_random_stream(frames_files,labels_files)
+		stream = data_io.buffered_random(stream)
 		stream = frame_speaker_stream(stream,speaker_ids)
 		total_frames = 0
 		for f,l,s,size in data_io.randomise(stream):
@@ -145,7 +146,7 @@ if __name__ == "__main__":
 		train = theano.function(
 				inputs  = [lr,start_idx,end_idx],
 				outputs = cross_entropy,
-				updates = updates.adadelta(parameters,gradients,eps=lr),
+				updates = updates.adadelta(parameters,gradients,learning_rate=lr),
 				givens  = {
 					X: X_shared[start_idx:end_idx],
 					Y: Y_shared[start_idx:end_idx],

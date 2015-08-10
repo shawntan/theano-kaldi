@@ -104,7 +104,7 @@ if __name__ == "__main__":
 	print "Compiling function...",
 	train = theano.function(
 			inputs = [start_idx,end_idx],
-			updates = updates.adadelta(parameters,gradients,eps=1e-8),
+			updates = updates.adadelta(parameters,gradients,learning_rate=1e-8),
 			#outputs = [T.mean(T.sum((X-X_recon)**2,axis=1)),cost],
 			givens  = {
 				X: X_shared[start_idx:end_idx],

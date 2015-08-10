@@ -3,7 +3,8 @@ import theano
 import theano.tensor as T
 import numpy         as np
 
-def adadelta(parameters,gradients,rho=np.float32(0.95),eps=np.float32(1e-4)):
+def adadelta(parameters,gradients,rho=np.float32(0.95),learning_rate=np.float32(1e-4)):
+	eps = learning_rate
 	gradients_sq = [ theano.shared(np.zeros(p.get_value().shape,dtype=np.float32)) for p in parameters ]
 	deltas_sq    = [ theano.shared(np.zeros(p.get_value().shape,dtype=np.float32)) for p in parameters ]
 
@@ -17,7 +18,7 @@ def adadelta(parameters,gradients,rho=np.float32(0.95),eps=np.float32(1e-4)):
 	return gradient_sq_updates + deltas_sq_updates + parameters_updates
 
 
-def momentum(parameters,gradients,mu=0.9,eps=1e-3):
+def momentum(parameters,gradients,mu=0.9,learning_rate=1e-3):
 	deltas = [ theano.shared(np.zeros(p.get_value().shape,dtype=np.float32)) for p in parameters ]
 	delta_nexts = [ mu*delta + eps*grad for delta,grad in zip(deltas,gradients) ]
 	delta_updates = [ (delta, delta_next) for delta,delta_next in zip(deltas,delta_nexts) ]

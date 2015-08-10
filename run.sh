@@ -78,8 +78,8 @@ nnet-forward $dir/feature_transform ark:- ark,t:- \
 # Training of the nnet.
 num_pdfs=`gmm-info $gmmdir/final.mdl | grep pdfs | awk '{print $NF}'`
 input_dim=`copy-feats scp:$dir/data/train/feats.scp ark:- | eval $feat_transform | feat-to-dim ark:- -`
-gen_structure="$input_dim:1024:256"
-dis_structure="256:1024:1024:1024:1024:$num_pdfs"
+gen_structure="$input_dim:1024:512"
+dis_structure="512:1024:1024:1024:1024:$num_pdfs"
 model_name=split
 
 frame_files=($dir/pkl/train.*.pklgz)
