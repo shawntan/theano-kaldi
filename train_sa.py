@@ -11,6 +11,7 @@ config.file("output_file","Output file.")
 config.file("temporary_file","Temporary file.")
 config.file("spk2utt_file","spk2utt file from Kaldi.")
 config.integer("minibatch","Minibatch size.",default=128)
+config.integer("speaker_embedding_size","Speaker embedding size.",default=128)
 config.integer("max_epochs","Maximum number of epochs to train.",default=200)
 
 config.parse_args()
@@ -105,7 +106,7 @@ if __name__ == "__main__":
 			gen_layer_sizes, 
 			gen_output_size,
 			speaker_count = len(speaker_ids),
-			speaker_embedding_size = 100,
+			speaker_embedding_size = config.args.speaker_embedding_size,
 			activation=T.nnet.sigmoid
 		)
 

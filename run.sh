@@ -32,7 +32,10 @@ for set in train dev test
 do
 	cp -r data/$set $dir/data/$set
 	rm -rf $dir/data/$set/{cmvn,feats}.scp $dir/data/$set/split*
-	steps/make_fbank.sh --fbank-config conf/fbank.conf --cmd "run.pl" --nj $num_jobs $dir/data/$set $dir/_log $dir/_fbank || exit 1;
+	steps/make_fbank.sh \
+		--fbank-config conf/fbank.conf \
+		--cmd "run.pl" --nj $num_jobs \
+		$dir/data/$set $dir/_log $dir/_fbank || exit 1;
 done
 )
 
@@ -80,38 +83,29 @@ num_pdfs=`gmm-info $gmmdir/final.mdl | grep pdfs | awk '{print $NF}'`
 input_dim=`copy-feats scp:$dir/data/train/feats.scp ark:- | eval $feat_transform | feat-to-dim ark:- -`
 gen_structure="$input_dim:1024:512"
 dis_structure="512:1024:1024:1024:1024:$num_pdfs"
-model_name=split
 
 frame_files=($dir/pkl/train.*.pklgz)
 label_files=($dir/pkl/train_lbl.*.pklgz)
 
-#python -u $TK_DIR/test_vae.py \
-#	--frames-files ${frame_files[@]:1:1} \
-#	--labels-files ${label_files[@]:1:1} \
-#	--structure "$input_dim:1024:1024:512" \
-#	--output-file $dir/pretrain.pkl \
-#	--minibatch 128 --max-epochs 5
-
-#[ -f $dir/generative_sa.pkl ] || \
-	python -u $TK_DIR/train_sa_vae.py \
-	--frames-files ${frame_files[@]} \
-	--generative-structure $gen_structure \
-	--validation-frames-file $dir/pkl/gen_val.pklgz   \
-	--output-file  $dir/generative_sa.pkl \
-	--spk2utt-file $dir/data/train/spk2utt \
-	--minibatch 256 --max-epochs 20
-
-#[ -f $dir/generative_sa_train.pkl ] || \
-#	python -u $TK_DIR/adapt_sa_vae.py \
-#	--frames-files			$dir/pkl/train.*.pklgz \
-#	--generative-structure	$gen_structure \
-#	--validation-frames-file $dir/pkl/gen_val_train.pklgz   \
-#	--generative-model $dir/generative_sa.pkl \
-#	--output-file  $dir/generative_sa_train.pkl \
-#	--spk2utt-file $dir/data/train/spk2utt \
-#	--minibatch 256 --max-epochs 20
-
-
+mkdir -p $dir/generative_model
+for batch_size in {128,256,512}
+do
+	for embedding_size in {64,128,256,512}
+	do
+		generative_suffix=${batch_size}_${embedding_size}
+				
+		[ -f $dir/generative_model/${generative_suffix}.pkl ] || \
+		python -u $TK_DIR/train_sa_vae.py \
+		--frames-files ${frame_files[@]} \
+		--generative-structure $gen_structure \
+		--validation-frames-file $dir/pkl/gen_val.pklgz \
+		--output-file  $dir/generative_model/${generative_suffix}.pkl \
+		--spk2utt-file $dir/data/train/spk2utt \
+		--minibatch $batch_size --max-epochs 30 \
+		--speaker-embedding-size $embedding_size
+	done
+done
+exit
 #[ -f $dir/discriminative_sa.pkl ] || \
 	python -u $TK_DIR/train_sa.py \
 	--frames-files				${frame_files[@]:1} \
@@ -124,7 +118,8 @@ label_files=($dir/pkl/train_lbl.*.pklgz)
 	--temporary-file $dir/tmp.discriminative_sa.pkl \
 	--output-file    $dir/discriminative_sa.pkl \
 	--spk2utt-file $dir/data/train/spk2utt \
-	--minibatch 128 --max-epochs 200
+	--minibatch 128 --max-epochs 200 \
+	--speaker-embedding-size 128
 
 
 #[ -f $dir/generative_sa_dev.pkl ] || \
@@ -135,8 +130,8 @@ label_files=($dir/pkl/train_lbl.*.pklgz)
 	--generative-model $dir/generative_sa.pkl \
 	--output-file  $dir/generative_sa_dev.pkl \
 	--spk2utt-file $dir/data/dev/spk2utt \
-	--minibatch 256 --max-epochs 20
-
+	--minibatch 256 --max-epochs 30 \
+	--speaker-embedding-size 128
 
 for set in dev
 do

@@ -8,6 +8,7 @@ if __name__ == "__main__":
 	config.file("spk2utt_file","spk2utt file from Kaldi.")
 	config.integer("minibatch","Minibatch size.",default=128)
 	config.integer("max_epochs","Maximum number of epochs to train.",default=20)
+	config.integer("speaker_embedding_size","Speaker embedding size.",default=128)
 	config.parse_args()
 	
 import theano
@@ -32,7 +33,7 @@ import vae_sa
 from pprint import pprint
 
 from sa_io import *
-
+import shutil
 if __name__ == "__main__":
 	frames_files = config.args.frames_files
 	
@@ -81,16 +82,16 @@ if __name__ == "__main__":
 				layer_sizes,
 				output_size,
 				speaker_count = len(speaker_ids),
-				speaker_embedding_size = 100,
+				speaker_embedding_size = config.args.speaker_embedding_size,
 				activation=T.nnet.sigmoid
 			)
 	
 
 	parameters = P.values()
 	X_recon,cost = recon_error(X,S)
-	loss = cost + 0.5 * sum(T.sum(w**2) for w in parameters if "embedding" not in w.name)
-	general_params = [ w for w in parameters if "embedding" not in w.name ]
-	speaker_params = [ w for w in parameters if "embedding" in w.name ]
+	loss = cost + 0.5 * sum(T.sum(w**2) for w in parameters)
+	general_params = [ w for w in parameters if "speaker_embedding" not in w.name ]
+	speaker_params = [ w for w in parameters if "speaker_embedding" in w.name ]
 	general_grads = T.grad(cost,wrt=general_params)
 	speaker_grads = T.grad(cost,wrt=speaker_params)
 
@@ -128,7 +129,7 @@ if __name__ == "__main__":
 
 
 
-	learning_rate = 1e-6
+	learning_rate = 5e-7
 	train_epoch(train_all,speaker_stream(),learning_rate)
 	scores = test_validation(test)
 	print "All training:", scores
@@ -144,11 +145,14 @@ if __name__ == "__main__":
 		score = scores[-1]
 		if score < best_score:
 			best_score = score
-			P.save(config.args.output_file)
+			P.save(config.args.output_file + ".tmp")
 			print "Saved."
 		else:
 			print
 
-		learning_rate = max(0.5 * learning_rate,1e-9)
+		learning_rate = max(0.5 * learning_rate,1e-7)
 		print "Learning rate:",learning_rate
 
+		if (epoch + 1) % 5 == 0:
+			shutil.copyfile(config.args.output_file + ".tmp",
+							config.args.output_file + "." + str(epoch+1))

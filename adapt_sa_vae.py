@@ -10,6 +10,7 @@ if __name__ == "__main__":
 	config.file("spk2utt_file","spk2utt file from Kaldi.")
 	config.integer("minibatch","Minibatch size.",default=128)
 	config.integer("max_epochs","Maximum number of epochs to train.",default=20)
+	config.integer("speaker_embedding_size","Speaker embedding size.",default=128)
 	config.parse_args()
 	
 import theano
@@ -81,21 +82,21 @@ if __name__ == "__main__":
 	train = None
 	P = Parameters()
 	speaker_count = len(speaker_ids)
-	speaker_embedding_size = 100
+	speaker_embedding_size = 128 
 	_, recon_error = vae_sa.build(P, "vae",
 				input_size,
 				layer_sizes,
 				output_size,
 				speaker_count = speaker_count,
-				speaker_embedding_size = speaker_embedding_size,
+				speaker_embedding_size = config.args.speaker_embedding_size,
 				activation=T.nnet.sigmoid
 			)
 	P.load(config.args.generative_model)
-	P.encode_speaker_embedding = vae_sa.initial_weights(speaker_count,speaker_embedding_size)
-	P.decode_speaker_embedding = vae_sa.initial_weights(speaker_count,speaker_embedding_size)
+	P.encode_speaker_embedding.set_value(np.ones((speaker_count,speaker_embedding_size),dtype=np.float32))
+	P.decode_speaker_embedding.set_value(np.ones((speaker_count,speaker_embedding_size),dtype=np.float32))
 
 
-	parameters = [ p for p in P.values() if "embedding" in p.name ]
+	parameters = [ p for p in P.values() if "speaker_embedding" in p.name ]
 	X_recon,cost = recon_error(X,S)
 	loss = cost
 	gradients  = T.grad(cost,wrt=parameters)
