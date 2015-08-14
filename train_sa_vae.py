@@ -24,7 +24,7 @@ import model
 import updates
 import cPickle as pickle
 from itertools import izip, chain
-
+import feedforward
 
 import theano_toolkit.utils   as U
 from theano_toolkit.parameters import Parameters
@@ -34,6 +34,17 @@ from pprint import pprint
 
 from sa_io import *
 import shutil
+
+def clip(delta,thresh):
+    thresh = np.float32(thresh)
+    norm = T.sqrt(T.sum(delta**2))
+    return T.switch(
+            T.gt(norm,thresh),
+            (thresh/norm) * delta,
+            delta
+        )
+	
+
 if __name__ == "__main__":
 	frames_files = config.args.frames_files
 	
@@ -63,8 +74,7 @@ if __name__ == "__main__":
 		return total_errors/total_frames
 	
 	def train_epoch(train,stream,learning_rate):
-		total_count = 0
-		total_loss  = 0
+		prev_cost = 0
 		for f,s,size in stream:
 			X_shared.set_value(f)
 			S_shared.set_value(s)
@@ -74,7 +84,15 @@ if __name__ == "__main__":
 			for idx in seq:
 				start = idx*minibatch_size
 				end = min((idx+1)*minibatch_size,size)
-				train(start,end,learning_rate)
+				cost = train(start,end,learning_rate)
+				# print cost
+				#if cost[0] - prev_cost > 400:
+				#	print cost[0] - prev_cost
+				#	print start,end, end-start
+				#	print f[start:end]
+				#	print s[start:end]
+				#prev_cost = cost[0]
+
 
 	P = Parameters()
 	_, recon_error = vae_sa.build(P, "vae",
@@ -83,22 +101,23 @@ if __name__ == "__main__":
 				output_size,
 				speaker_count = len(speaker_ids),
 				speaker_embedding_size = config.args.speaker_embedding_size,
-				activation=T.nnet.sigmoid
+				activation=feedforward.relu #T.nnet.sigmoid
 			)
 	
 
 	parameters = P.values()
 	X_recon,cost = recon_error(X,S)
-	loss = cost + 0.5 * sum(T.sum(w**2) for w in parameters)
+	loss = cost + 0.5 * sum(T.sum(w**2) for w in parameters if "speaker_embedding" not in w.name)
 	general_params = [ w for w in parameters if "speaker_embedding" not in w.name ]
 	speaker_params = [ w for w in parameters if "speaker_embedding" in w.name ]
-	general_grads = T.grad(cost,wrt=general_params)
-	speaker_grads = T.grad(cost,wrt=speaker_params)
+	general_grads = [ clip(w,10.) for w in T.grad(cost,wrt=general_params) ]
+	speaker_grads = [ w for w in T.grad(cost,wrt=speaker_params) ]
 
 	print "Compiling function...",
 	def create_trainer(params,grads):
 		return theano.function(
 				inputs = [start_idx,end_idx,lr],
+				outputs = [T.mean(T.sum((X-X_recon)**2,axis=1)),cost],
 				updates = updates.adadelta(params,grads,learning_rate=lr),
 				givens  = {
 					X: X_shared[start_idx:end_idx],
@@ -112,7 +131,7 @@ if __name__ == "__main__":
 	train_speaker = create_trainer(speaker_params,speaker_grads)
 	test = theano.function(
 			inputs = [X,S],
-			outputs = [T.mean(T.sum((X-X_recon)**2,axis=1)),cost],
+			outputs = [T.mean(T.sum((X-X_recon)**2,axis=1)),cost,],
 		)
 	print "Done."
 	
@@ -124,13 +143,14 @@ if __name__ == "__main__":
 	def general_stream():
 		return randomised_speaker_groups(
 				speaker_grouped_stream(frames_files),
-				speaker_ids
+				speaker_ids,
+				shuffle_frames=True
 			)
 
 
 
-	learning_rate = 5e-7
-	train_epoch(train_all,speaker_stream(),learning_rate)
+	learning_rate = 1e-8
+	train_epoch(train_general,general_stream(),learning_rate)
 	scores = test_validation(test)
 	print "All training:", scores
 	best_score = scores[-1]
@@ -150,7 +170,7 @@ if __name__ == "__main__":
 		else:
 			print
 
-		learning_rate = max(0.5 * learning_rate,1e-7)
+		learning_rate = max(0.5 * learning_rate,1e-8)
 		print "Learning rate:",learning_rate
 
 		if (epoch + 1) % 5 == 0:

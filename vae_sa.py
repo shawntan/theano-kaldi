@@ -37,13 +37,12 @@ def build(P, name,
 								activation=activation,
 								)
 	P.W_vae_decoder_output.set_value(
-			initial_weights(
+			feedforward.relu_init(
 				decoder_hidden_sizes[-1],
 				speaker_embedding_size * 2
-			)
-		)
+			))
 
-	P.W_input_embedding  = initial_weights(input_size,speaker_embedding_size)
+	P.W_input_embedding  = feedforward.relu_init(input_size,speaker_embedding_size)
 	P.b_input_embedding  = np.zeros((speaker_embedding_size,),dtype=np.float32)
 
 	P.W_embedding_recon_mean   = np.zeros((speaker_embedding_size,input_size))
@@ -85,7 +84,7 @@ def build(P, name,
 		recon_X_logvar = T.dot(spkr_recon_logvar,P.W_embedding_recon_logvar) + P.b_embedding_recon_logvar
 
 		kl_divergence = -0.5 * T.sum(1 + logvar - mean**2 - T.exp(logvar), axis=1)
-		log_p_x_z = - 0.5 * T.sum(recon_X_logvar+(X - recon_X_mean)**2/T.exp(recon_X_logvar),axis=1)
+		log_p_x_z = - 0.5 * T.sum(recon_X_logvar+(X - recon_X_mean)**2/(1e-6 + T.exp(recon_X_logvar)),axis=1)
 		cost = -(-kl_divergence + log_p_x_z)
 		return recon_X_mean, T.mean(cost)
 	return sample_encode,recon_error

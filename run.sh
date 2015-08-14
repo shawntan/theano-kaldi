@@ -16,7 +16,7 @@ dir=exp/dnn_fbank_tk_feedforward_vae
 
 
 # Settings
-num_jobs=20
+num_jobs=25
 norm_vars=true
 echo "--left-context=5 --right-context=5" > $dir/splice_opts
 splice_opts=`cat $dir/splice_opts 2>/dev/null` # frame-splicing options.
@@ -30,8 +30,8 @@ echo "--num-mel-bins=40"
 [ -d $dir/_fbank ] || (
 for set in train dev test
 do
-	cp -r data/$set $dir/data/$set
-	rm -rf $dir/data/$set/{cmvn,feats}.scp $dir/data/$set/split*
+#	cp -r data/$set $dir/data/$set
+#	rm -rf $dir/data/$set/{cmvn,feats}.scp $dir/data/$set/split*
 	steps/make_fbank.sh \
 		--fbank-config conf/fbank.conf \
 		--cmd "run.pl" --nj $num_jobs \
@@ -43,16 +43,15 @@ done
 [ -f $dir/feature_transform ] || \
 	copy-feats scp:$dir/data/train/feats.scp ark:- \
 	| add-deltas --delta-order=$(cat $dir/delta_order) ark:- ark:- \
-	| splice-feats $splice_opts ark:- ark:- \
 	| compute-cmvn-stats ark:- - \
 	| cmvn-to-nnet --binary=false - $dir/feature_transform  || exit 1;
 
 # Reading -> Transforming -> Writing to pickle
 feat_transform="\
 add-deltas --delta-order=$(cat $dir/delta_order) ark:- ark:- |\
-splice-feats $splice_opts ark:- ark:- |\
 nnet-forward $dir/feature_transform ark:- ark,t:- \
 "
+#splice-feats $splice_opts ark:- ark:- |\
 [ -f $dir/pkl/train.00.pklgz ] || \
 	time $TK_DIR/prepare_pickle.sh $num_jobs \
 	$dir/data/train \
@@ -77,24 +76,24 @@ nnet-forward $dir/feature_transform ark:- ark,t:- \
 	$dir/_log/split_dev \
 	"$feat_transform" || exit 1;
 
-
 # Training of the nnet.
 num_pdfs=`gmm-info $gmmdir/final.mdl | grep pdfs | awk '{print $NF}'`
 input_dim=`copy-feats scp:$dir/data/train/feats.scp ark:- | eval $feat_transform | feat-to-dim ark:- -`
-gen_structure="$input_dim:1024:512"
+gen_structure="1353:1024:1024:512"
 dis_structure="512:1024:1024:1024:1024:$num_pdfs"
 
 frame_files=($dir/pkl/train.*.pklgz)
 label_files=($dir/pkl/train_lbl.*.pklgz)
 
 mkdir -p $dir/generative_model
-for batch_size in {128,256,512}
+for batch_size in 512
 do
-	for embedding_size in {64,128,256,512}
+	for embedding_size in 256
 	do
 		generative_suffix=${batch_size}_${embedding_size}
 				
-		[ -f $dir/generative_model/${generative_suffix}.pkl ] || \
+#		[ -f $dir/generative_model/${generative_suffix}.pkl ] || \
+	#	THEANO_FLAGS=optimizer=None \
 		python -u $TK_DIR/train_sa_vae.py \
 		--frames-files ${frame_files[@]} \
 		--generative-structure $gen_structure \

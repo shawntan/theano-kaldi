@@ -9,6 +9,8 @@ import math
 import sys
 import random
 
+
+import cPickle as pickle
 def get_speaker_ids(spk2utt_file):
 	return { lines.split()[0]:idx
 			 for idx,lines in enumerate(open(spk2utt_file)) }
@@ -17,13 +19,16 @@ def frame_speaker_stream(stream,speaker_ids):
 	for tup in stream:
 		name = tup[0]
 		frames = tup[1]
-		speaker = name.split('_')[0]
+		speaker = name.split('-')[0]
 		ids = np.empty(frames.shape[0],dtype=np.int32)
 		ids.fill(speaker_ids[speaker])
 		yield tup[1:] + (ids,)
 
 def speaker_grouped_stream(frames_files):
-	streams = [ data_io.stream(f,with_name=True) for f in frames_files ]
+	streams = [ 
+			data_io.context(data_io.stream_file(f),left=5,right=5)
+			for f in frames_files
+		]
 	stream_next = [ s.next() for s in streams ]
 
 	frames_buf = speakers_buf = None
@@ -32,25 +37,23 @@ def speaker_grouped_stream(frames_files):
 		stream_idx = random.randint(0,len(streams)-1)
 		try:
 			group = []
-
 			name,frames = stream_next[stream_idx]
-			batch_speaker = speaker = name.split('_')[0]
+			batch_speaker = speaker = name.split('-')[0]
 			while speaker == batch_speaker:
 				group.append((name,frames))
-
 				stream_next[stream_idx] = streams[stream_idx].next()
-
 				name,frames = stream_next[stream_idx]
-				speaker = name.split('_')[0]
+				speaker = name.split('-')[0]
 		except StopIteration:
 			streams = streams[:stream_idx] + streams[stream_idx+1:]
 			stream_next = stream_next[:stream_idx] + stream_next[stream_idx+1:]
 		if len(group) > 0: yield group
 
 def randomised_speaker_groups(grouped_stream,speaker_ids,
-		buffer_size=2**17,
+		buffer_size=2**18,
 		validation_set=None,
-		validation_utt_count=1):
+		validation_utt_count=1,
+		shuffle_frames=False):
 	if validation_set == None:
 		validation_set = config.args.validation_frames_file
 	import gzip,os
@@ -65,7 +68,7 @@ def randomised_speaker_groups(grouped_stream,speaker_ids,
 		validation_file = None
 	
 	for group in grouped_stream:
-		speaker = group[0][0].split('_')[0]
+		speaker = group[0][0].split('-')[0]
 		group_start_frame = frame_count
 		if validation_file: pickle.dump(group[0],validation_file,2)
 		for name,frames in group[1:]:
@@ -75,23 +78,31 @@ def randomised_speaker_groups(grouped_stream,speaker_ids,
 
 			if frame_count + frames.shape[0] > buffer_size:
 				if frame_count > group_start_frame:
-#					print "(shuffle %d,%d)"%(group_start_frame,frame_count),
 					np.random.shuffle(frames_buf[group_start_frame:frame_count])
-#				print "yield"
+
+				if shuffle_frames:
+					rng_state = np.random.get_state()
+					np.random.shuffle(frames_buf[:frame_count])
+					np.random.set_state(rng_state)
+					np.random.shuffle(speakers_buf[:frame_count])
+
+					
 				yield frames_buf,speakers_buf,frame_count
 				group_start_frame = frame_count = 0
-
-#			print speaker,
-#			frames[:,-1] = speaker_ids[speaker]
+#			frames[:,-1] = speaker_ids[speaker] #TODO: remove
 			frames_buf[frame_count:frame_count+frames.shape[0]] = frames
 			speakers_buf[frame_count:frame_count+frames.shape[0]] = speaker_ids[speaker]
 			frame_count = frame_count + frames.shape[0]
 
 		if frame_count > group_start_frame:
-#			print "(shuffle %d,%d)"%(group_start_frame,frame_count),
 			np.random.shuffle(frames_buf[group_start_frame:frame_count])
 
-	
+	if shuffle_frames:
+		rng_state = np.random.get_state()
+		np.random.shuffle(frames_buf[:frame_count])
+		np.random.set_state(rng_state)
+		np.random.shuffle(speakers_buf[:frame_count])
+
 	yield frames_buf,speakers_buf,frame_count
 	if validation_file: validation_file.close()
 	

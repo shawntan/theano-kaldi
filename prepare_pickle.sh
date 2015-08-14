@@ -47,6 +47,6 @@ idx=${filename##*.}
 } > "'$log_dir'/split.$idx.log" 2>&1
 echo "Done."
 ' fnord
-PYTHONPATH=theano-kaldi/ python -c "import sys;import data_io;[ n for n,_,_ in data_io.stream('${output_prefix}.00.pklgz','${output_prefix}_lbl.00.pklgz',with_name=True)]"
+PYTHONPATH=$TK_DIR python -c "import sys;import data_io;[ n for n,_,_ in data_io.stream('${output_prefix}.00.pklgz','${output_prefix}_lbl.00.pklgz',with_name=True)]"
 
 rm -rf $tmp_dir
