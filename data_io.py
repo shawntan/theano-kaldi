@@ -3,26 +3,65 @@ import cPickle as pickle
 import sys
 import numpy as np
 from itertools import izip
-def stream(*filenames,**kwargs):	
-	with_name = kwargs.get('with_name',False)
-	fds = [ gzip.open(f,'rb') for f in filenames ]
-	try:
-		while True:
-			items = [ pickle.load(fd) for fd in fds ]
-			assert(all(x[0]==items[0][0] for x in items))
-			# HACK. To remove.
-			result = tuple(
-					x[1] if hasattr(x[1],'shape') else np.array(x[1],dtype=np.int32)
-					for x in items
-				)
-			if with_name:
-				yield (items[0][0],) + result
-			else:
-				yield result
-	except EOFError:
-		pass
-	for fd in fds: fd.close()
+import random
 
+def context(stream,left=5,right=5):
+	left_buf = right_buf = None
+	idxs = np.arange(1000).reshape(1000,1) + np.arange(left + 1 + right)
+	for name,frames in stream:
+		dim = frames.shape[1]
+		if left_buf is None:
+			left_buf = np.zeros((left,dim),dtype=np.float32)
+			right_buf = np.zeros((right,dim),dtype=np.float32)
+		length = frames.shape[0]
+		if length > idxs.shape[0]:
+			idxs = np.arange(length).reshape(length,1) + np.arange(left + 1 + right)
+
+		frames = np.concatenate([left_buf,frames,right_buf])
+		frames = frames[idxs[:length]]
+		frames = frames.reshape(length, (left + 1 + right) * dim)
+
+		yield name,frames
+
+def stream_file(filename,open_method=gzip.open):
+	with open_method(filename,'rb') as fd:
+		try:
+			while True:
+				x = pickle.load(fd)
+				yield x
+		except EOFError: pass
+
+			
+def stream(*filenames,**kwargs):	
+	gens = [ stream_file(f) for f in filenames ]
+	return zip_streams(*gens,**kwargs)
+
+def zip_streams(*streams,**kwargs):
+	with_name = kwargs.get('with_name',False)
+	while True:
+		items = [ s.next() for s in streams ]
+		assert(all(x[0]==items[0][0] for x in items))
+		result = tuple(x[1] for x in items)
+		if with_name:
+			yield (items[0][0],) + result
+		else:
+			yield result
+
+def buffered_random(stream,buffer_items=20 * 8):
+	item_buffer = [None] * buffer_items
+	item_count = 0
+	for item in stream:
+		item_buffer[item_count] = item
+		item_count += 1
+		
+		if buffer_items == item_count:
+			random.shuffle(item_buffer)
+			for item in item_buffer: yield item
+			item_count = 0
+	if item_count > 0:
+		item_buffer = item_buffer[:item_count]
+		random.shuffle(item_buffer)
+		for item in item_buffer: yield item
 
 def randomise(stream,buffer_size=2**17):
 	buf = None
