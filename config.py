@@ -45,25 +45,6 @@ def integer(var_name,description="",default=None):
 			help =description 
 		)
 
-
-#parser.add_argument(
-#		'--tanh',
-#		dest = 'activation',
-#		action = 'store_const',
-#		const = T.tanh, default = T.nnet.sigmoid,
-#		help='Use tanh as activation function.'
-#	)
-
-
-frames_files = None
-labels_files = None
-output_files = None
-hidden_activation = T.nnet.sigmoid
-input_size = 360
-layer_sizes = [1024]*5
-output_size = 1874
-minibatch = 128
-max_epochs = 5
 args = None
 def parse_args():
 	global args
