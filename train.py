@@ -7,6 +7,7 @@ if __name__ == "__main__":
     config.file("validation_frames_file","Validation set frames file.")
     config.file("validation_labels_file","Validation set labels file.")
     config.file("output_file","Output file.")
+    config.file("pretrain_file","Pretrain file.")
     config.file("temporary_file","Temporary file.")
     config.integer("minibatch","Minibatch size.",default=128)
     config.integer("max_epochs","Maximum number of epochs to train.",default=200)
@@ -50,30 +51,61 @@ if __name__ == "__main__":
     _,outputs = feedforward(X)
 
     if config.args.pretrain_file != None:
-                model.
+        model.load(config.args.pretrain_file,params)
         model.save(config.args.temporary_file,params)
 
-        loss = cross_entropy = T.mean(T.nnet.categorical_crossentropy(outputs,Y))
-        parameters = params.values() 
-        print "Parameters to tune:"
-        pprint(parameters)
-        gradients = T.grad(loss,wrt=parameters)
-        train = theano.function(
-                inputs  = [lr,start_idx,end_idx],
-                outputs = cross_entropy,
-                updates = updates.momentum(parameters,gradients,eps=lr),
-                givens  = {
-                    X: X_shared[start_idx:end_idx],
-                    Y: Y_shared[start_idx:end_idx]
-                }
-            )
-        test = theano.function(
-                inputs = [X,Y],
-                outputs = [loss]  + [ T.mean(T.neq(T.argmax(outputs,axis=1),Y))]
-            )
+    loss = cross_entropy = T.mean(T.nnet.categorical_crossentropy(outputs,Y))
+    parameters = params.values() 
+    print "Parameters to tune:"
+    pprint(parameters)
+    gradients = T.grad(loss,wrt=parameters)
+    train = theano.function(
+            inputs  = [lr,start_idx,end_idx],
+            outputs = cross_entropy,
+            updates = updates.momentum(parameters,gradients,eps=lr),
+            givens  = {
+                X: X_shared[start_idx:end_idx],
+                Y: Y_shared[start_idx:end_idx]
+            }
+        )
+    test = theano.function(
+            inputs = [X,Y],
+            outputs = [loss]  + [ T.mean(T.neq(T.argmax(outputs,axis=1),Y))]
+        )
+    total_cost = 0
+    total_errors = 0
+    total_frames = 0
+    for f,l in data_io.stream(val_frames_file,val_labels_file):
+        test_outputs  = test(f,l)
+        loss = test_outputs[0]
+        errors = np.array(test_outputs[1:])
+        total_frames += f.shape[0]
+
+        total_cost   += f.shape[0] * loss
+        total_errors += f.shape[0] * errors
+
+    learning_rate = 0.08
+    best_score = total_cost/total_frames
+
+    print total_errors/total_frames,best_score
+
+    for epoch in xrange(config.args.max_epochs):
+        split_streams = [ data_io.stream(f,l) for f,l in izip(frames_files,labels_files) ]
+        stream = chain(*split_streams)
+        total_frames = 0
+        for f,l,size in data_io.randomise(stream):
+            total_frames += f.shape[0]
+            X_shared.set_value(f)
+            Y_shared.set_value(l)
+            batch_count = int(math.ceil(size/float(minibatch_size)))
+            for idx in xrange(batch_count):
+                start = idx*minibatch_size
+                end = min((idx+1)*minibatch_size,size)
+                train(learning_rate,start,end)
         total_cost = 0
         total_errors = 0
         total_frames = 0
+
         for f,l in data_io.stream(val_frames_file,val_labels_file):
             test_outputs  = test(f,l)
             loss = test_outputs[0]
@@ -83,51 +115,20 @@ if __name__ == "__main__":
             total_cost   += f.shape[0] * loss
             total_errors += f.shape[0] * errors
 
-        learning_rate = 0.08
-        best_score = total_cost/total_frames
+        cost = total_cost/total_frames
+        print total_errors/total_frames,cost
+        _best_score = best_score
 
-        print total_errors/total_frames,best_score
+        if cost < _best_score:
+            best_score = cost
+            model.save(config.args.temporary_file,params)
 
-        for epoch in xrange(config.args.max_epochs):
-            split_streams = [ data_io.stream(f,l) for f,l in izip(frames_files,labels_files) ]
-            stream = chain(*split_streams)
-            total_frames = 0
-            for f,l,size in data_io.randomise(stream):
-                total_frames += f.shape[0]
-                X_shared.set_value(f)
-                Y_shared.set_value(l)
-                batch_count = int(math.ceil(size/float(minibatch_size)))
-                for idx in xrange(batch_count):
-                    start = idx*minibatch_size
-                    end = min((idx+1)*minibatch_size,size)
-                    train(learning_rate,start,end)
-            total_cost = 0
-            total_errors = 0
-            total_frames = 0
+        if cost/_best_score > 0.99995:
+            learning_rate *= 0.5
+            model.load(config.args.temporary_file,params)
 
-            for f,l in data_io.stream(val_frames_file,val_labels_file):
-                test_outputs  = test(f,l)
-                loss = test_outputs[0]
-                errors = np.array(test_outputs[1:])
-                total_frames += f.shape[0]
+        if learning_rate < 1e-6: break
+        print "Learning rate is now",learning_rate
 
-                total_cost   += f.shape[0] * loss
-                total_errors += f.shape[0] * errors
-
-            cost = total_cost/total_frames
-            print total_errors/total_frames,cost
-            _best_score = best_score
-
-            if cost < _best_score:
-                best_score = cost
-                model.save(config.args.temporary_file,params)
-
-            if cost/_best_score > 0.99995:
-                learning_rate *= 0.5
-                model.load(config.args.temporary_file,params)
-
-            if learning_rate < 1e-6: break
-            print "Learning rate is now",learning_rate
-
-        model.load(config.args.temporary_file,params)
-        model.save(config.args.output_file,params)
+    model.load(config.args.temporary_file,params)
+    model.save(config.args.output_file,params)
