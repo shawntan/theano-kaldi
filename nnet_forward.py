@@ -1,4 +1,5 @@
-if __name__ == "__main__": import config
+if __name__ == "__main__":
+    import config
     config.structure("structure","Structure of model.")
     config.file("model",".pkl file containing discriminative model.")
     config.file("class_counts",".counts file giving counts of all the pdfs.")

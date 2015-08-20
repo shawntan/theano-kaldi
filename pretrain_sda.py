@@ -78,7 +78,7 @@ if __name__ == "__main__":
                     W,b,b_rec,
                     input_layer = (layer.name == 'X')
                 ),
-                kl_divergence = ((layer.name != 'X')
+                kl_divergence = (layer.name != 'X')
             )
         lr = 0.01 if i > 0 else 0.003
         parameters = [W,b,b_rec]
