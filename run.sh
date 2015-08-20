@@ -50,6 +50,7 @@ add-deltas --delta-order=$(cat $dir/delta_order) ark:- ark:- |\
 splice-feats $splice_opts ark:- ark:- |\
 nnet-forward $dir/feature_transform ark:- ark,t:- \
 "
+
 [ -f $dir/pkl/train.00.pklgz ] || time $TK_DIR/prepare_pickle.sh $num_jobs \
 	$dir/data/train/feats.scp \
 	$ali_dir \
@@ -75,29 +76,33 @@ label_files=($dir/pkl/train_lbl.*.pklgz)
 	--minibatch 128 --max-epochs 20
 
 [ -f $dir/dnn.${model_name}.pkl ] || \
-	python $TK_DIR/train.py \
-	--frames-files			 ${frame_files[@]:1} \
-	--labels-files			 ${label_files[@]:1} \
-	--validation-frames-file ${frame_files[0]}   \
-	--validation-labels-file ${label_files[0]}   \
-	--structure $structure \
-	--pretrain-file $dir/pretrain.pkl \
-	--temporary-file $dir/tmp.dnn.${model_name}.pkl \
-	--output-file    $dir/dnn.${model_name}.pkl \
-	--minibatch 128 --max-epochs 200
+	python -u $TK_DIR/train.py \
+	--frames-files				${frame_files[@]:1} \
+	--labels-files				${label_files[@]:1} \
+	--validation-frames-file	${frame_files[0]}   \
+	--validation-labels-file	${label_files[0]}   \
+	--structure					$structure \
+	--temporary-file			$dir/dnn.${model_name}.pkl.tmp \
+	--output-file				$dir/dnn.${model_name}.pkl \
+	--minibatch 128 --max-epochs 200 \
+	--speaker-embedding-size 128
 
 for set in dev test
 do
+	python_posteriors="THEANO_FLAGS=device=gpu0 \
+		python $TK_DIR/nnet_forward_sa.py \
+		--structure '$structure' \
+		--model '$dir/dnn.${model_name}.pkl' \
+		--class-counts '$dir/decode_${set}_${model_name}/class.counts'"
 
 	feats="copy-feats scp:$dir/data/$set/feats.scp ark:- \
 		| $feat_transform \
-		| python2 theano-kaldi/nnet_forward.py $structure $dir/dnn.${model_name}.pkl $dir/decode_${set}_${model_name}/class.counts"
+		| $python_posteriors"
 
 	$TK_DIR/decode_dnn.sh --nj 1 \
 		--scoring-opts "--min-lmwt 1 --max-lmwt 8" \
 		--norm-vars true \
 		$gmmdir/graph $dir/data/${set}\
-		${gmmdir}_ali $dir/decode_${set}_${model_name}\
+		${gmmdir}_ali $dir/decode_${set}_sa\
 		"$feats"
-
 done
