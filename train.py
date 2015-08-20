@@ -1,4 +1,3 @@
-
 if __name__ == "__main__":
     import config
     config.parser.description = "theano-kaldi script for fine-tuning DNN feed-forward models."
@@ -9,9 +8,7 @@ if __name__ == "__main__":
     config.file("validation_labels_file","Validation set labels file.")
     config.file("output_file","Output file.")
     config.file("temporary_file","Temporary file.")
-    config.file("spk2utt_file","spk2utt file from Kaldi.")
     config.integer("minibatch","Minibatch size.",default=128)
-    config.integer("speaker_embedding_size","Speaker embedding size.",default=128)
     config.integer("max_epochs","Maximum number of epochs to train.",default=200)
     config.parse_args()
 
