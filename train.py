@@ -22,11 +22,11 @@ import sys
 
 import data_io
 import model
-import updates
 import cPickle as pickle
 from pprint import pprint
 from itertools import izip, chain
-
+from theano_toolkit import updates
+from theano_toolkit.parameters import Parameters
 if __name__ == "__main__":
     frames_files    = config.args.frames_files
     labels_files    = config.args.labels_files
@@ -40,13 +40,13 @@ if __name__ == "__main__":
     X_shared = theano.shared(np.zeros((1,input_size),dtype=theano.config.floatX))
     Y_shared = theano.shared(np.zeros((1,),dtype=np.int32))
 
-    params = {}
+    P = Parameters()
     feedforward = model.build_feedforward(
-			params,
-			input_size = input_size,
-			layer_sizes = layer_sizes,
-			output_size = output_size
-		)
+            P,
+            input_size = input_size,
+            layer_sizes = layer_sizes,
+            output_size = output_size
+        )
 
     X = T.matrix('X')
     Y = T.ivector('Y')
@@ -56,18 +56,20 @@ if __name__ == "__main__":
     _,outputs = feedforward(X)
 
     if config.args.pretrain_file != None:
-        model.load(config.args.pretrain_file,params)
-        model.save(config.args.temporary_file,params)
+        P.load(config.args.pretrain_file)
+        P.save(config.args.temporary_file)
 
     loss = cross_entropy = T.mean(T.nnet.categorical_crossentropy(outputs,Y))
-    parameters = params.values() 
+    parameters = P.values() 
     print "Parameters to tune:"
     pprint(parameters)
+    
+    update_vars = Parameters()
     gradients = T.grad(loss,wrt=parameters)
     train = theano.function(
             inputs  = [lr,start_idx,end_idx],
             outputs = cross_entropy,
-            updates = updates.momentum(parameters,gradients,eps=lr),
+            updates = updates.momentum(parameters,gradients,learning_rate=lr,P=update_vars),
             givens  = {
                 X: X_shared[start_idx:end_idx],
                 Y: Y_shared[start_idx:end_idx]
@@ -77,23 +79,18 @@ if __name__ == "__main__":
             inputs = [X,Y],
             outputs = [loss]  + [ T.mean(T.neq(T.argmax(outputs,axis=1),Y))]
         )
-    total_cost = 0
-    total_errors = 0
-    total_frames = 0
-    for f,l in data_io.stream(val_frames_file,val_labels_file):
-        test_outputs  = test(f,l)
-        loss = test_outputs[0]
-        errors = np.array(test_outputs[1:])
-        total_frames += f.shape[0]
-        total_cost   += f.shape[0] * loss
-        total_errors += f.shape[0] * errors
-    
-	learning_rate = 0.08
-    best_score = total_cost/total_frames
 
-    print total_errors/total_frames,best_score
-
-    for epoch in xrange(config.args.max_epochs):
+    def run_test():
+        total_errors = None
+        total_frames = 0
+        for f,l in data_io.stream(val_frames_file,val_labels_file):
+            if total_errors is None:
+                total_errors = np.array(test(f,l),dtype=np.float32)
+            else:
+                total_errors += [f.shape[0] * v for v in test(f,l)]
+            total_frames += f.shape[0]
+        return total_errors/total_frames
+    def run_train():
         split_streams = [ data_io.stream(f,l) for f,l in izip(frames_files,labels_files) ]
         stream = chain(*split_streams)
         total_frames = 0
@@ -106,33 +103,28 @@ if __name__ == "__main__":
                 start = idx*minibatch_size
                 end = min((idx+1)*minibatch_size,size)
                 train(learning_rate,start,end)
-        total_cost = 0
-        total_errors = 0
-        total_frames = 0
 
-        for f,l in data_io.stream(val_frames_file,val_labels_file):
-            test_outputs  = test(f,l)
-            loss = test_outputs[0]
-            errors = np.array(test_outputs[1:])
-            total_frames += f.shape[0]
-
-            total_cost   += f.shape[0] * loss
-            total_errors += f.shape[0] * errors
-
-        cost = total_cost/total_frames
-        print total_errors/total_frames,cost
+    
+    learning_rate = 0.08
+    best_score = np.inf
+    
+    for epoch in xrange(config.args.max_epochs):
+        scores = run_test()
+        score = scores[0]
+        print scores
         _best_score = best_score
+        if score < _best_score:
+            best_score = score
+            P.save(config.args.temporary_file)
+            update_vars.save("update_vars.tmp")
 
-        if cost < _best_score:
-            best_score = cost
-            model.save(config.args.temporary_file,params)
-
-        if cost/_best_score > 0.99995:
+        if score/_best_score > 0.995 and epoch > 0:
             learning_rate *= 0.5
-            model.load(config.args.temporary_file,params)
+            print "Learning rate is now",learning_rate
+            P.load(config.args.temporary_file)
+            update_vars.load("update_vars.tmp")
 
         if learning_rate < 1e-6: break
-        print "Learning rate is now",learning_rate
-
-    model.load(config.args.temporary_file,params)
-    model.save(config.args.output_file,params)
+        run_train()
+    P.load(config.args.temporary_file)
+    P.save(config.args.output_file)

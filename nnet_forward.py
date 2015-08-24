@@ -14,14 +14,15 @@ import cPickle as pickle
 
 import sys
 
+from theano_toolkit.parameters import Parameters
 def ark_stream():
     return ark_io.parse(sys.stdin)
 
 def create_model(filename,counts,input_size,layer_sizes,output_size):
     X = T.matrix('X')
-    params = {}
-    predict = model.build_feedforward(params,input_size,layer_sizes,output_size)
-    model.load(filename,params)
+    P = Parameters()
+    predict = model.build_feedforward(P,input_size,layer_sizes,output_size)
+    P.load(filename)
     _,output = predict(X)
     f = theano.function(
             inputs = [X],

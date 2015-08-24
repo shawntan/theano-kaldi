@@ -13,13 +13,12 @@ import theano.tensor as T
 import numpy as np
 import math
 import sys
-
 import data_io
 import model
-import updates
 import cPickle as pickle
 from itertools import izip, chain
-
+from theano_toolkit import updates
+from theano_toolkit.parameters import Parameters
 theano_rng = T.shared_randomstreams.RandomStreams(np.random.RandomState(1234).randint(2**30))
 
 def corrupt(x,corr=0.2):
@@ -29,7 +28,6 @@ def corrupt(x,corr=0.2):
 
 def reconstruct(corr_x,W,b,b_rec,input_layer):
     hidden = T.nnet.sigmoid(T.dot(corr_x,W) + b)
-
     recon  = T.dot(hidden,W.T) + b_rec
     if not input_layer:
         recon = T.nnet.sigmoid(recon)
@@ -50,14 +48,13 @@ if __name__ == "__main__":
     layer_sizes = config.args.structure[1:-1]
     output_size = config.args.structure[-1]
 
-    params = {}
-
+    P = Parameters()
     feedforward = model.build_feedforward(
-			params,
-			input_size = input_size,
-			layer_sizes = layer_sizes,
-			output_size = output_size
-		)
+            P,
+            input_size = input_size,
+            layer_sizes = layer_sizes,
+            output_size = output_size
+        )
 
     X_shared = theano.shared(np.zeros((1,input_size),dtype=theano.config.floatX))
     X = T.matrix('X')
@@ -70,10 +67,12 @@ if __name__ == "__main__":
     layer_sizes = [input_size] + layer_sizes[:-1]
     pretrain_functions = []
     for i,layer in enumerate(layers[:-1]):
-        W = params["W_hidden_%d"%i]
-        b = params["b_hidden_%d"%i]
-        b_rec = theano.shared(np.zeros((layer_sizes[i],),dtype=theano.config.floatX))
-
+        W = P["W_hidden_%d"%i]
+        b = P["b_hidden_%d"%i]
+        b_rec = theano.shared(
+                np.zeros((layer_sizes[i],),dtype=theano.config.floatX),
+                name="b_rec_%d"
+            )
         loss = cost(
                 layer,
                 reconstruct(
@@ -89,7 +88,7 @@ if __name__ == "__main__":
         train = theano.function(
                 inputs = [start_idx,end_idx],
                 outputs = loss,
-                updates = updates.momentum(parameters,gradients,eps=lr),
+                updates = updates.momentum(parameters,gradients,learning_rate=lr),
                 givens  = {
                     X: X_shared[start_idx:end_idx],
                 }
