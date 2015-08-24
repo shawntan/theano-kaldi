@@ -11,7 +11,7 @@ def label_stream():
 	for l in sys.stdin:
 		l = l.rstrip().split()
 		name = l[0]
-		pdfs = map(int,l[1:])
+		pdfs = np.array(map(int,l[1:]),dtype=np.int32)
 		yield name,pdfs
 
 if __name__ == "__main__":

@@ -41,7 +41,12 @@ if __name__ == "__main__":
     Y_shared = theano.shared(np.zeros((1,),dtype=np.int32))
 
     params = {}
-    feedforward = model.build_feedforward(params)
+    feedforward = model.build_feedforward(
+			params,
+			input_size = input_size,
+			layer_sizes = layer_sizes,
+			output_size = output_size
+		)
 
     X = T.matrix('X')
     Y = T.ivector('Y')
@@ -80,11 +85,10 @@ if __name__ == "__main__":
         loss = test_outputs[0]
         errors = np.array(test_outputs[1:])
         total_frames += f.shape[0]
-
         total_cost   += f.shape[0] * loss
         total_errors += f.shape[0] * errors
-
-    learning_rate = 0.08
+    
+	learning_rate = 0.08
     best_score = total_cost/total_frames
 
     print total_errors/total_frames,best_score

@@ -4,7 +4,6 @@ if __name__ == "__main__":
     config.file_sequence("frames_files",".pklgz file containing audio frames.")
     config.structure("structure","Structure of discriminative model.")
     config.file("output_file","Output file.")
-    config.file("temporary_file","Temporary file.")
     config.integer("minibatch","Minibatch size.",default=128)
     config.integer("max_epochs","Maximum number of epochs to train.",default=20)
     config.parse_args()
@@ -45,7 +44,6 @@ def cost(x,recon_x,kl_divergence):
 if __name__ == "__main__":
 
     frames_files   = config.args.frames_files
-    labels_files   = config.args.labels_files
     minibatch_size = config.args.minibatch
 
     input_size  = config.args.structure[0]
@@ -54,7 +52,12 @@ if __name__ == "__main__":
 
     params = {}
 
-    feedforward = model.build_feedforward(params)
+    feedforward = model.build_feedforward(
+			params,
+			input_size = input_size,
+			layer_sizes = layer_sizes,
+			output_size = output_size
+		)
 
     X_shared = theano.shared(np.zeros((1,input_size),dtype=theano.config.floatX))
     X = T.matrix('X')
@@ -96,11 +99,11 @@ if __name__ == "__main__":
     for layer_idx,train in enumerate(pretrain_functions):    
         print "Pretraining layer",layer_idx,"..."
         for epoch in xrange(config.args.max_epochs):    
-            split_streams = [ data_io.stream(f,l) for f,l in izip(frames_files,labels_files) ]
+            split_streams = [ data_io.stream(f) for f in frames_files ]
             stream = chain(*split_streams)
             total_count = 0
             total_loss  = 0
-            for f,_,size in data_io.randomise(stream):
+            for f,size in data_io.randomise(stream):
                 X_shared.set_value(f)
                 batch_count = int(math.ceil(size/float(minibatch_size)))
                 for idx in xrange(batch_count):

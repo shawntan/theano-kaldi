@@ -15,11 +15,7 @@ def initial_weights(input_size,output_size,factor=4):
 		dtype=theano.config.floatX
 	)
 
-def build_feedforward(params,input_size=None,layer_sizes=None,output_size=None):
-	input_size = input_size or config.input_size
-	layer_sizes = layer_sizes or config.layer_sizes
-	output_size = output_size or config.output_size
-
+def build_feedforward(params,input_size,layer_sizes,output_size):
 	prev_layer_size = input_size
 #	factor = 4 if config.hidden_activation == T.nnet.sigmoid else 1
 #	factor = 1
@@ -37,7 +33,7 @@ def build_feedforward(params,input_size=None,layer_sizes=None,output_size=None):
 	def feedforward(X):
 		hidden_layers = [X]
 		for i in xrange(len(layer_sizes)):
-			layer = config.hidden_activation(
+			layer = T.nnet.sigmoid(
 				T.dot(hidden_layers[-1],params["W_hidden_%d"%i]) +\
 				params["b_hidden_%d"%i]
 			)
