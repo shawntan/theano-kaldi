@@ -1,14 +1,19 @@
+import sys
+import logging,json
 if __name__ == "__main__":
     import config
     config.parser.description = "theano-kaldi script for fine-tuning DNN feed-forward models."
+
     config.file_sequence("frames_files",".pklgz file containing audio frames.")
     config.file_sequence("labels_files",".pklgz file containing frames labels.")
+    config.file_sequence("validation_frames_files","Validation set frames file.")
+    config.file_sequence("validation_labels_files","Validation set labels file.")
+
     config.structure("structure","Structure of discriminative model.")
-    config.file("validation_frames_file","Validation set frames file.")
-    config.file("validation_labels_file","Validation set labels file.")
     config.file("output_file","Output file.")
     config.file("pretrain_file","Pretrain file.")
     config.file("temporary_file","Temporary file.")
+    config.file("log","File for logs.",default="-")
     config.integer("minibatch","Minibatch size.",default=128)
     config.integer("max_epochs","Maximum number of epochs to train.",default=200)
     config.parse_args()
@@ -18,7 +23,6 @@ import theano.tensor as T
 
 import numpy as np
 import math
-import sys
 
 import data_io
 import model
@@ -27,18 +31,38 @@ from pprint import pprint
 from itertools import izip, chain
 from theano_toolkit import updates
 from theano_toolkit.parameters import Parameters
+
 if __name__ == "__main__":
+    if config.args.log == "-":
+        log_fh = sys.stdout
+    else:
+        log_fh = open(config.args.log,'w')
+        print "Logging to " + config.args.log
+    logging.basicConfig(
+            stream=log_fh,
+            level=logging.DEBUG,
+            format="%(asctime)s:%(levelname)s:%(message)s"
+        )
+
     frames_files    = config.args.frames_files
     labels_files    = config.args.labels_files
-    val_frames_file = config.args.validation_frames_file
-    val_labels_file = config.args.validation_labels_file
+    val_frames_files = config.args.validation_frames_files
+    val_labels_files = config.args.validation_labels_files
     minibatch_size  = config.args.minibatch
     input_size      = config.args.structure[0]
     layer_sizes     = config.args.structure[1:-1]
     output_size     = config.args.structure[-1]
-
+    
+    logging.info("Training data:     " + ','.join(frames_files))
+    logging.info("Training labels:   " + ','.join(labels_files))
+    logging.info("Validation data:   " + ','.join(val_frames_files))
+    logging.info("Validation labels: " + ','.join(val_labels_files))
+    logging.info("Minibatch size:    " + str(minibatch_size))
+    logging.info("Structure:         " + ':'.join(map(str,config.args.structure)))
+    
     X_shared = theano.shared(np.zeros((1,input_size),dtype=theano.config.floatX))
     Y_shared = theano.shared(np.zeros((1,),dtype=np.int32))
+    logging.debug("Created shared variables")
 
     P = Parameters()
     feedforward = model.build_feedforward(
@@ -60,12 +84,15 @@ if __name__ == "__main__":
         P.save(config.args.temporary_file)
 
     loss = cross_entropy = T.mean(T.nnet.categorical_crossentropy(outputs,Y))
+    logging.debug("Built model expression.")
+
     parameters = P.values() 
-    print "Parameters to tune:"
-    pprint(parameters)
+    logging.info("Parameters to tune:" + ','.join(w.name for w in parameters))
     
+    logging.debug("Compiling functions...")
     update_vars = Parameters()
     gradients = T.grad(loss,wrt=parameters)
+
     train = theano.function(
             inputs  = [lr,start_idx,end_idx],
             outputs = cross_entropy,
@@ -75,24 +102,37 @@ if __name__ == "__main__":
                 Y: Y_shared[start_idx:end_idx]
             }
         )
+    
+    monitored_values = {
+            "cross_entropy": loss,
+            "classification_error":T.mean(T.neq(T.argmax(outputs,axis=1),Y))
+        }
+    monitored_keys = monitored_values.keys()
     test = theano.function(
             inputs = [X,Y],
-            outputs = [loss]  + [ T.mean(T.neq(T.argmax(outputs,axis=1),Y))]
+            outputs = [ monitored_values[k] for k in monitored_keys ]
         )
+
+    logging.debug("Done.")
 
     def run_test():
         total_errors = None
         total_frames = 0
-        for f,l in data_io.stream(val_frames_file,val_labels_file):
+        split_streams = [ data_io.stream(f,l) for f,l in izip(val_frames_files,val_labels_files) ]
+        for f,l in chain(*split_streams):
             if total_errors is None:
                 total_errors = np.array(test(f,l),dtype=np.float32)
             else:
                 total_errors += [f.shape[0] * v for v in test(f,l)]
             total_frames += f.shape[0]
-        return total_errors/total_frames
+        values = total_errors/total_frames
+        return { k:v for k,v in zip(monitored_keys,values) }
+
     def run_train():
         split_streams = [ data_io.stream(f,l) for f,l in izip(frames_files,labels_files) ]
-        stream = chain(*split_streams)
+        stream = data_io.random_select_stream(*split_streams)
+        stream = data_io.buffered_random(stream)
+
         total_frames = 0
         for f,l,size in data_io.randomise(stream):
             total_frames += f.shape[0]
@@ -105,26 +145,35 @@ if __name__ == "__main__":
                 train(learning_rate,start,end)
 
     
-    learning_rate = 0.08
+    learning_rate = 0.008
     best_score = np.inf
     
+    logging.debug("Starting training process...")
     for epoch in xrange(config.args.max_epochs):
         scores = run_test()
-        score = scores[0]
-        print scores
+        score = scores['cross_entropy']
+        logging.info("Epoch %d results: "%epoch + json.dumps(scores))
         _best_score = best_score
+
         if score < _best_score:
+            logging.debug("score < best_score, saving model.")
             best_score = score
             P.save(config.args.temporary_file)
             update_vars.save("update_vars.tmp")
 
         if score/_best_score > 0.995 and epoch > 0:
             learning_rate *= 0.5
-            print "Learning rate is now",learning_rate
+            logging.debug("Halving learning rate. learning_rate = " + str(learning_rate))
+            logging.debug("Loading previous model.")
             P.load(config.args.temporary_file)
             update_vars.load("update_vars.tmp")
 
-        if learning_rate < 1e-6: break
+        if learning_rate < 1e-5: break
+        
+        logging.info("Epoch %d training."%(epoch + 1))
         run_train()
+        logging.info("Epoch %d training done."%(epoch + 1))
+
     P.load(config.args.temporary_file)
     P.save(config.args.output_file)
+    logging.debug("Done training process.")

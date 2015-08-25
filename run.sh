@@ -70,22 +70,23 @@ label_files=($dir/pkl/train_lbl.?*.pklgz)
 
 [ -f $dir/pretrain.pkl ] || \
 	python $TK_DIR/pretrain_sda.py\
-	--frames-files ${frame_files[@]:1} \
+	--frames-files ${frame_files[@]:2} \
 	--structure $structure \
 	--output-file $dir/pretrain.pkl \
 	--minibatch 128 --max-epochs 20
 
-[ -f $dir/dnn.${model_name}.pkl ] || \
+#[ -f $dir/dnn.${model_name}.pkl ] || \
 	python -u $TK_DIR/train.py \
-	--frames-files				${frame_files[@]:1} \
-	--labels-files				${label_files[@]:1} \
-	--validation-frames-file	${frame_files[0]}   \
-	--validation-labels-file	${label_files[0]}   \
+	--frames-files				${frame_files[@]:2} \
+	--labels-files				${label_files[@]:2} \
+	--validation-frames-files	${frame_files[@]:0:2}   \
+	--validation-labels-files	${label_files[@]:0:2}   \
 	--structure					$structure \
 	--pretrain-file				$dir/pretrain.pkl \
 	--temporary-file			$dir/dnn.${model_name}.pkl.tmp \
 	--output-file				$dir/dnn.${model_name}.pkl \
-	--minibatch 128 --max-epochs 200
+	--minibatch 128 --max-epochs 200 \
+	--log - #$dir/_log/train_${model_name}.log
 
 for set in dev test
 do
