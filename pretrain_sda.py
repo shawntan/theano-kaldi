@@ -1,9 +1,13 @@
+import sys
+import logging,json
 if __name__ == "__main__":
     import config
     config.parser.description = "theano-kaldi script for pretraining models using stacked denoising autoencoders."
     config.file_sequence("frames_files",".pklgz file containing audio frames.")
+    config.file_sequence("validation_frames_files","Validation set frames file.")
     config.structure("structure","Structure of discriminative model.")
     config.file("output_file","Output file.")
+    config.file("temporary_file","Temporary file.")
     config.integer("minibatch","Minibatch size.",default=128)
     config.integer("max_epochs","Maximum number of epochs to train.",default=20)
     config.parse_args()
@@ -12,7 +16,6 @@ import theano.tensor as T
 
 import numpy as np
 import math
-import sys
 import data_io
 import model
 import cPickle as pickle
@@ -41,7 +44,8 @@ def cost(x,recon_x,kl_divergence):
 
 if __name__ == "__main__":
 
-    frames_files   = config.args.frames_files
+    frames_files     = config.args.frames_files
+    val_frames_files = config.args.validation_frames_files
     minibatch_size = config.args.minibatch
 
     input_size  = config.args.structure[0]
@@ -67,6 +71,7 @@ if __name__ == "__main__":
     layer_sizes = [input_size] + layer_sizes[:-1]
     pretrain_functions = []
     for i,layer in enumerate(layers[:-1]):
+        logging.debug("Compiling functions for layer %d"%i)
         W = P["W_hidden_%d"%i]
         b = P["b_hidden_%d"%i]
         b_rec = theano.shared(
@@ -93,22 +98,49 @@ if __name__ == "__main__":
                     X: X_shared[start_idx:end_idx],
                 }
             )
-        pretrain_functions.append(train)
+        test = theano.function(inputs=[X],outputs=loss)
 
-    for layer_idx,train in enumerate(pretrain_functions):    
-        print "Pretraining layer",layer_idx,"..."
-        for epoch in xrange(config.args.max_epochs):    
-            split_streams = [ data_io.stream(f) for f in frames_files ]
-            stream = chain(*split_streams)
-            total_count = 0
-            total_loss  = 0
-            for f,size in data_io.randomise(stream):
-                X_shared.set_value(f)
-                batch_count = int(math.ceil(size/float(minibatch_size)))
-                for idx in xrange(batch_count):
-                    start = idx*minibatch_size
-                    end = min((idx+1)*minibatch_size,size)
-                    total_loss += train(start,end)
-                    total_count += 1
-            print total_loss/total_count
+        pretrain_functions.append((train,test))
+        logging.debug("Done compiling for layer %d"%i)
+
+    def run_train(train):
+        split_streams = [ data_io.stream(f) for f in frames_files ]
+        stream = data_io.random_select_stream(*split_streams)
+        stream = data_io.buffered_random(stream)
+        total_frames = 0
+        for f,size in data_io.randomise(stream):
+            X_shared.set_value(f)
+            batch_count = int(math.ceil(size/float(minibatch_size)))
+            for idx in xrange(batch_count):
+                start = idx*minibatch_size
+                end = min((idx+1)*minibatch_size,size)
+                train(start,end)
+
+    def run_test(test):
+        total_errors = 0
+        total_frames = 0
+        split_streams = [ data_io.stream(f) for f in val_frames_files ]
+        for f in chain(*split_streams):
+            total_errors += f.shape[0] * test(f)
+            total_frames += f.shape[0]
+        values = total_errors / total_frames
+        return values
+
+
+
+    for layer_idx,(train,test) in enumerate(pretrain_functions):    
+        logging.debug("Pretraining layer " + str(layer_idx) + "...")
+        best_score = np.inf
+        for epoch in xrange(config.args.max_epochs):
+            run_train(train)
+            score = run_test(test)
+            logging.debug("Score on validation set: " + str(score))
+            if score < best_score:
+                best_score = score
+                logging.debug("Saving model.")
+                P.save(config.args.temporary_file) 
+            else:
+                logging.debug("Layer done.")
+                P.load(config.args.temporary_file) 
+                break
     model.save(config.args.output_file,params)

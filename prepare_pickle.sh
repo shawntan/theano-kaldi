@@ -24,7 +24,7 @@ spk2utt_file=$data_dir/spk2utt
 
 total_lines=$(wc -l <${spk2utt_file})
 ((lines_per_file = (total_lines + num_jobs - 1) / num_jobs))
-cat $data_dir/spk2utt | cut -d' ' -f1 | split -d --lines=${lines_per_file} - "$tmp_dir/spkrs."
+cat $data_dir/spk2utt | cut -d' ' -f1 | shuf | split -d --lines=${lines_per_file} - "$tmp_dir/spkrs."
 
 ls $tmp_dir/spkrs.* | xargs -n 1 -P $num_jobs sh -c '
 filename=$1

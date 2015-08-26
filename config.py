@@ -1,6 +1,9 @@
+import sys
 import argparse
+import logging
 import theano.tensor as T
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+
 def file_sequence(var_name,description="",default=None):
 	arg_name = var_name.replace("_","-")
 	parser.add_argument(
@@ -45,7 +48,19 @@ def integer(var_name,description="",default=None):
 			help =description 
 		)
 
+file("log","File for logs.",default="-")
 args = None
 def parse_args():
 	global args
 	args = parser.parse_args()
+	if args.log == "-":
+		log_fh = sys.stdout
+	else:
+		log_fh = open(args.log,'w')
+		print "Logging to " + args.log
+	logging.basicConfig(
+			stream=log_fh,
+			level=logging.DEBUG,
+			format="%(asctime)s:%(levelname)s:%(message)s"
+		)
+

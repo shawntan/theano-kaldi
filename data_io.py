@@ -32,9 +32,10 @@ def stream_file(filename,open_method=gzip.open):
         except EOFError: pass
 
             
-def stream(*filenames,**kwargs):    
+def stream(*filenames,**kwargs):
     gens = [ stream_file(f) for f in filenames ]
     return zip_streams(*gens,**kwargs)
+            
 
 def random_select_stream(*streams):
     while len(streams) > 0:
@@ -50,8 +51,11 @@ def zip_streams(*streams,**kwargs):
         items = [ s.next() for s in streams ]
         assert(all(x[0]==items[0][0] for x in items))
         result = tuple(x[1] for x in items)
+
         if with_name:
-            yield (items[0][0],) + result
+            result = (items[0][0],) + result
+        if len(result) == 1:
+            yield result[0]
         else:
             yield result
 
@@ -75,6 +79,8 @@ def randomise(stream,buffer_size=2**17):
     buf = None
     buf_instances = 0
     for item in stream:
+        if type(item) is not tuple:
+            item = (item,)
         if buf == None:
             buf = [
                     np.zeros((buffer_size,) + x.shape[1:],dtype=x.dtype)

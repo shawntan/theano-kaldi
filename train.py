@@ -13,7 +13,6 @@ if __name__ == "__main__":
     config.file("output_file","Output file.")
     config.file("pretrain_file","Pretrain file.")
     config.file("temporary_file","Temporary file.")
-    config.file("log","File for logs.",default="-")
     config.integer("minibatch","Minibatch size.",default=128)
     config.integer("max_epochs","Maximum number of epochs to train.",default=200)
     config.parse_args()
@@ -33,17 +32,6 @@ from theano_toolkit import updates
 from theano_toolkit.parameters import Parameters
 
 if __name__ == "__main__":
-    if config.args.log == "-":
-        log_fh = sys.stdout
-    else:
-        log_fh = open(config.args.log,'w')
-        print "Logging to " + config.args.log
-    logging.basicConfig(
-            stream=log_fh,
-            level=logging.DEBUG,
-            format="%(asctime)s:%(levelname)s:%(message)s"
-        )
-
     frames_files    = config.args.frames_files
     labels_files    = config.args.labels_files
     val_frames_files = config.args.validation_frames_files
@@ -126,7 +114,7 @@ if __name__ == "__main__":
                 total_errors += [f.shape[0] * v for v in test(f,l)]
             total_frames += f.shape[0]
         values = total_errors/total_frames
-        return { k:v for k,v in zip(monitored_keys,values) }
+        return { k:float(v) for k,v in zip(monitored_keys,values) }
 
     def run_train():
         split_streams = [ data_io.stream(f,l) for f,l in izip(frames_files,labels_files) ]
@@ -145,14 +133,14 @@ if __name__ == "__main__":
                 train(learning_rate,start,end)
 
     
-    learning_rate = 0.008
+    learning_rate = 0.08
     best_score = np.inf
     
     logging.debug("Starting training process...")
     for epoch in xrange(config.args.max_epochs):
         scores = run_test()
         score = scores['cross_entropy']
-        logging.info("Epoch %d results: "%epoch + json.dumps(scores))
+        logging.info("Epoch " + str(epoch) + " results: " + json.dumps(scores))
         _best_score = best_score
 
         if score < _best_score:
