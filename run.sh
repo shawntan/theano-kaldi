@@ -7,7 +7,7 @@ gmmdir=exp/tri3
 ali_dir=${gmmdir}_ali
 
 # Output folder
-dir=exp/dnn_fbank_tk_feedforward
+dir=exp/dnn_fbank_tk_feedforward_ssl
 
 # Create directories
 [ -d $dir ]      || mkdir -p $dir
@@ -61,41 +61,73 @@ nnet-forward $dir/feature_transform ark:- ark,t:- \
 
 # Training of the nnet.
 num_pdfs=`gmm-info $gmmdir/final.mdl | grep pdfs | awk '{print $NF}'`
-input_dim=`copy-feats scp:$dir/data/train/feats.scp ark:- | eval $feat_transform | feat-to-dim ark:- -`
-structure="$input_dim:1024:1024:1024:1024:1024:1024:$num_pdfs"
+input_dim=1353 #`copy-feats scp:$dir/data/train/feats.scp ark:- | eval $feat_transform | feat-to-dim ark:- -`
+
 model_name=split
 
 frame_files=($dir/pkl/train.?*.pklgz)
 label_files=($dir/pkl/train_lbl.?*.pklgz)
 
-[ -f $dir/pretrain.pkl ] || \
-	python $TK_DIR/pretrain_sda.py\
+
+generative_structure="$input_dim:1024:1024:512"
+discriminative_structure="1024:1024:1024:1024:$num_pdfs"
+[ -f $dir/generative.${model_name}.pkl ] || \
+	THEANO_FLAGS=device=gpu0 python -u $TK_DIR/train_vae.py \
 	--frames-files				${frame_files[@]:2} \
 	--validation-frames-files	${frame_files[@]:0:2}   \
-	--structure $structure \
-	--output-file $dir/pretrain.pkl \
-	--temporary-file $dir/pretrain.pkl.tmp \
-	--minibatch 128 --max-epochs 20
-
-[ -f $dir/dnn.${model_name}.pkl ] || \
-	python -u $TK_DIR/train.py \
-	--frames-files				${frame_files[@]:1} \
-	--labels-files				${label_files[@]:1} \
-	--validation-frames-files	${frame_files[0]}   \
-	--validation-labels-files	${label_files[0]}   \
-	--structure					$structure \
-	--pretrain-file				$dir/pretrain.pkl \
-	--temporary-file			$dir/dnn.${model_name}.pkl.tmp \
-	--output-file				$dir/dnn.${model_name}.pkl \
-	--minibatch 128 --max-epochs 200 \
+	--structure					$generative_structure \
+	--temporary-file			$dir/generative.${model_name}.pkl.tmp \
+	--output-file				$dir/generative.${model_name}.pkl \
+	--minibatch 768 --max-epochs 200  \
 	--log - #$dir/_log/train_${model_name}.log
 
+#THEANO_FLAGS=device=gpu0 python -u $TK_DIR/pretrain_sda.py \
+#	--frames-files				${frame_files[@]:1} \
+#	--validation-frames-files	${frame_files[@]:0:1}   \
+#	--labels-files				${label_files[@]:1} \
+#	--validation-labels-files	${label_files[@]:0:1}   \
+#	--structure-z1	     		$generative_structure \
+#	--structure					$discriminative_structure \
+#	--z1-file					$dir/generative.${model_name}.pkl \
+#	--temporary-file			$dir/discriminative.${model_name}.pkl.tmp \
+#	--output-file				$dir/discriminative.${model_name}.pkl \
+#	--minibatch 128 --max-epochs 200  \
+#	--log - #$dir/_log/train_${model_name}.log
+
+#[ -f $dir/discriminative.${model_name}.pkl ] || \
+	THEANO_FLAGS=device=gpu0 python -u $TK_DIR/train.py \
+	--frames-files				${frame_files[@]:1} \
+	--validation-frames-files	${frame_files[@]:0:1}   \
+	--labels-files				${label_files[@]:1} \
+	--validation-labels-files	${label_files[@]:0:1}   \
+	--structure-z1	     		$generative_structure \
+	--structure					$discriminative_structure \
+	--z1-file					$dir/generative.${model_name}.pkl \
+	--temporary-file			$dir/discriminative.${model_name}.pkl.tmp \
+	--output-file				$dir/discriminative.${model_name}.pkl \
+	--minibatch 128 --max-epochs 200  \
+	--log - #$dir/_log/train_${model_name}.log
+
+	THEANO_FLAGS=device=gpu0 python -u $TK_DIR/train.py \
+	--frames-files				${frame_files[@]:1} \
+	--validation-frames-files	${frame_files[@]:0:1}   \
+	--labels-files				${label_files[@]:1} \
+	--validation-labels-files	${label_files[@]:0:1}   \
+	--structure-z1	     		$generative_structure \
+	--structure					$discriminative_structure \
+	--z1-file					$dir/generative.${model_name}.pkl \
+	--temporary-file			$dir/discriminative.${model_name}.pkl.tmp \
+	--output-file				$dir/discriminative.${model_name}.pkl \
+	--minibatch 128 --max-epochs 200  \
+	--log - #$dir/_log/train_${model_name}.log
 for set in dev test
 do
 	python_posteriors="THEANO_FLAGS=device=gpu0 \
 		python $TK_DIR/nnet_forward.py \
-		--structure '$structure' \
-		--model '$dir/dnn.${model_name}.pkl' \
+		--structure-z1	$generative_structure \
+		--structure		$discriminative_structure \
+		--z1-file		$dir/generative.${model_name}.pkl \
+		--model			$dir/discriminative.${model_name}.pkl \
 		--class-counts '$dir/decode_${set}_${model_name}/class.counts'"
 
 	feats="copy-feats scp:$dir/data/$set/feats.scp ark:- \
@@ -109,3 +141,21 @@ do
 		${gmmdir}_ali $dir/decode_${set}_${model_name}\
 		"$feats"
 done
+exit
+[ -f $dir/y_z2.${model_name}.pkl ] || \
+	THEANO_FLAGS=device=gpu0 python -u $TK_DIR/train_ssl.py \
+	--frames-files				${frame_files[@]:1} \
+	--validation-frames-files	${frame_files[@]:0:1}   \
+	--structure-z1	     		"$input_dim:1024:1024:512" \
+	--structure-y	     		"512:462" \
+	--structure-z2	     		"1024:256" \
+	--structure-z1-recon		"2048" \
+	--utt2spk-file				$dir/data/train/utt2spk \
+	--z1-file					$dir/generative.${model_name}.pkl \
+	--temporary-file			$dir/y_z2.${model_name}.pkl.tmp \
+	--output-file				$dir/y_z2.${model_name}.pkl \
+	--minibatch 512 --max-epochs 200  \
+	--log - #$dir/_log/train_${model_name}.log
+#
+#
+

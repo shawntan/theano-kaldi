@@ -126,8 +126,6 @@ if __name__ == "__main__":
         values = total_errors / total_frames
         return values
 
-
-
     for layer_idx,(train,test) in enumerate(pretrain_functions):    
         logging.debug("Pretraining layer " + str(layer_idx) + "...")
         best_score = np.inf
@@ -143,4 +141,5 @@ if __name__ == "__main__":
                 logging.debug("Layer done.")
                 P.load(config.args.temporary_file) 
                 break
-    model.save(config.args.output_file,params)
+
+    P.save(config.args.output_file)
