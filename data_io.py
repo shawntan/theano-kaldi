@@ -59,17 +59,17 @@ def zip_streams(*streams,**kwargs):
         else:
             yield result
 
-def buffered_random(stream,buffer_items=20 * 8):
+def buffered_random(stream,buffer_items=20 * 8,leak_percent=0.9):
     item_buffer = [None] * buffer_items
+    leak_count = int(buffer_items * leak_percent)
     item_count = 0
     for item in stream:
         item_buffer[item_count] = item
         item_count += 1
-        
         if buffer_items == item_count:
             random.shuffle(item_buffer)
-            for item in item_buffer: yield item
-            item_count = 0
+            for item in item_buffer[leak_count:]: yield item
+            item_count = leak_count
     if item_count > 0:
         item_buffer = item_buffer[:item_count]
         random.shuffle(item_buffer)

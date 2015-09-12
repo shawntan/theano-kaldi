@@ -10,7 +10,7 @@ def build(P, name,
             encoder_hidden_sizes,
             latent_size,
             decoder_hidden_sizes=None,
-            activation=T.tanh,
+            activation=T.nnet.softplus,
             initial_weights=feedforward.relu_init):
 
     if decoder_hidden_sizes == None:
@@ -20,12 +20,14 @@ def build(P, name,
             [input_size],
             encoder_hidden_sizes,
             latent_size,
+			activation=activation,
             initial_weights=initial_weights
         )
     decode = build_inferer(P,"%s_decoder"%name,
             [latent_size],
             decoder_hidden_sizes,
             input_size,
+			activation=activation,
             initial_weights=initial_weights)
 
     def recon_error(X,encode=encode,decode=decode):
@@ -46,15 +48,17 @@ def kl_divergence(mean, logvar):
     return -0.5 * T.sum(1 + logvar - T.sqr(mean) - T.exp(logvar), axis=-1)
 
 def build_inferer(P,name,input_sizes,hidden_sizes,output_size,
-        initial_weights=feedforward.initial_weights,
-        activation=T.nnet.softplus):
+        initial_weights,activation):
     combine_inputs = feedforward.build_combine_transform(
             P,"%s_input"%name,
             input_sizes,hidden_sizes[0],
-            initial_weights=initial_weights
+            initial_weights=initial_weights,
+            activation=activation
         )
-    transform = feedforward.build_stacked_transforms(P,name,hidden_sizes,
-                                initial_weights=initial_weights)
+    transform = feedforward.build_stacked_transforms(
+            P,name,hidden_sizes,
+            initial_weights=initial_weights,
+            activation=activation)
     output = build_encoder_output(
             P,name,
             hidden_sizes[-1],output_size,

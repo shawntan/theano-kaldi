@@ -5,10 +5,12 @@ if __name__ == "__main__":
     config.parser.description = "theano-kaldi script for fine-tuning DNN feed-forward models."
     config.file_sequence("frames_files",".pklgz file containing audio frames.")
     config.file_sequence("validation_frames_files","Validation set frames file.")
-
     config.structure("structure","Structure of discriminative model.")
+
     config.file("output_file","Output file.")
     config.file("temporary_file","Temporary file.")
+    config.file("learning_file","Temporary file.")
+
     config.integer("minibatch","Minibatch size.",default=512)
     config.integer("max_epochs","Maximum number of epochs to train.",default=200)
     config.parse_args()
@@ -27,6 +29,11 @@ from itertools import izip, chain
 from theano_toolkit import updates
 from theano_toolkit.parameters import Parameters
 import vae
+
+def count_frames(frames_files):    
+    split_streams = [ data_io.stream(f) for f in frames_files ]
+    return sum(f.shape[0] for f in chain(*split_streams))
+
 if __name__ == "__main__":
     frames_files    = config.args.frames_files
     val_frames_files = config.args.validation_frames_files
@@ -34,12 +41,15 @@ if __name__ == "__main__":
     input_size      = config.args.structure[0]
     layer_sizes     = config.args.structure[1:-1]
     output_size     = config.args.structure[-1]
+    training_frame_count = count_frames(frames_files)
     
     logging.info("Training data:     " + ','.join(frames_files))
     logging.info("Validation data:   " + ','.join(val_frames_files))
     logging.info("Minibatch size:    " + str(minibatch_size))
     logging.info("Structure:         " + ':'.join(map(str,config.args.structure)))
-    
+    logging.info("Training frame count: " + str(training_frame_count))
+
+        
     X_shared = theano.shared(np.zeros((1,input_size),dtype=theano.config.floatX))
     logging.debug("Created shared variables")
 
@@ -55,7 +65,7 @@ if __name__ == "__main__":
     recon_X,cost,kl_divergence,log_p = recon_error(X)
 
     parameters = P.values() 
-    loss = cost #+ 0.5 * sum(T.sum(T.sqr(w)) for w in parameters)
+    loss = cost + (0.5/training_frame_count)  * sum(T.sum(T.sqr(w)) for w in parameters)
     logging.debug("Built model expression.")
 
     logging.info("Parameters to tune:" + ','.join(w.name for w in parameters))
@@ -87,6 +97,7 @@ if __name__ == "__main__":
 
     logging.debug("Done.")
 
+
     def run_test():
         total_errors = None
         total_frames = 0
@@ -116,7 +127,7 @@ if __name__ == "__main__":
                 train(learning_rate,start,end)
 
     
-    learning_rate = 5e-5
+    learning_rate = 1e-5
     best_score = np.inf
     
     logging.debug("Starting training process...")
@@ -130,14 +141,14 @@ if __name__ == "__main__":
             logging.debug("score < best_score, saving model.")
             best_score = score
             P.save(config.args.temporary_file)
-            update_vars.save("update_vars.tmp")
+            update_vars.save(config.args.learning_file)
 
-        if score/_best_score > 0.999 and epoch > 0:
+        if score/_best_score > 0.95 and epoch > 0:
             learning_rate *= 0.5
             logging.debug("Halving learning rate. learning_rate = " + str(learning_rate))
             logging.debug("Loading previous model.")
             P.load(config.args.temporary_file)
-            update_vars.load("update_vars.tmp")
+            update_vars.load(config.args.learning_file)
 
         if learning_rate < 1e-9: break
         

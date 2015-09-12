@@ -31,8 +31,8 @@ def create_model(counts,input_size,z1_layer_sizes,z1_output_size,layer_sizes,out
         [z1_output_size], layer_sizes, output_size,
         activation=T.nnet.sigmoid
     )
-    _,Z1,_ = encode_Z1([X])
-    output = classify([Z1])
+    Z1,_,_ = encode_Z1([X])
+    _,output = classify([Z1])
     P_z1_x.load(config.args.z1_file)
     P.load(config.args.model)
     f = theano.function(

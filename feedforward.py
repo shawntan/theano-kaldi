@@ -24,13 +24,16 @@ def build_classifier(
         P, name,
         input_sizes, hidden_sizes, output_size,
         initial_weights=initial_weights,
-        activation=T.nnet.softplus):
+        activation=T.nnet.sigmoid):
     combine_inputs = build_combine_transform(
             P,"%s_input"%name,
             input_sizes,hidden_sizes[0],
+            initial_weights=initial_weights,
             activation=activation
         )
-    transforms = build_stacked_transforms(P,name,hidden_sizes,activation=activation)
+    transforms = build_stacked_transforms(P,name,hidden_sizes,
+            initial_weights=initial_weights,
+            activation=activation)
     output = build_transform(
         P,"%s_output"%name,hidden_sizes[-1],output_size,
         initial_weights=lambda x,y:np.zeros((x,y)),
@@ -45,19 +48,20 @@ def build_classifier(
 
 def build_stacked_transforms(
         P,name,sizes,
-        initial_weights=initial_weights,
-        activation=T.nnet.softplus):
+        activation,
+        initial_weights):
     if len(sizes) == 1:
         return lambda X:[X]
     else:
         transform_stack = build_stacked_transforms(
                 P,name,sizes[:-1],
                 initial_weights=initial_weights,
-                activation=T.nnet.softplus,
-            )
+                activation=activation)
         transform = build_transform(
                 P,"%s_%d"%(name,len(sizes)-1),
-                sizes[-2],sizes[-1]
+                sizes[-2],sizes[-1],
+                initial_weights=initial_weights,
+                activation=activation
             )
         def t(X):
             layers = transform_stack(X)
@@ -66,8 +70,8 @@ def build_stacked_transforms(
 
 def build_transform(
         P,name,input_size,output_size,
-        initial_weights=initial_weights,
-        activation=T.nnet.softplus):
+        initial_weights,
+        activation):
     P["W_%s"%name] = initial_weights(input_size,output_size)
     P["b_%s"%name] = np.zeros((output_size,), dtype=np.float32)
     W = P["W_%s"%name]
@@ -80,8 +84,8 @@ def build_transform(
 
 def build_combine_transform(
         P,name,input_sizes,output_size,
-        initial_weights=initial_weights,
-        activation=T.nnet.softplus):
+        initial_weights,
+        activation):
     weights = initial_weights(sum(input_sizes),output_size)
 
     Ws = []
@@ -99,7 +103,9 @@ def build_combine_transform(
                 acc += W[X]
             else:
                 acc += T.dot(X,W)
-        return activation(acc + b)
+        output = activation(acc + b)
+        output.name = name
+        return output
     return transform
 
 if __name__ == "__main__":

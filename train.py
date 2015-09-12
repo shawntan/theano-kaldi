@@ -12,9 +12,11 @@ if __name__ == "__main__":
     config.structure("structure_z1","Structure of M1.")
     config.structure("structure","Structure of discriminative model.")
 
+    config.file("z1_file","Z1 params file.")
+    config.file("pretrain_file","Pretrain file.")
     config.file("output_file","Output file.")
     config.file("temporary_file","Temporary file.")
-    config.file("z1_file","Z1 params file.")
+    config.file("learning_file","Temporary file.")
 
     config.integer("minibatch","Minibatch size.",default=128)
     config.integer("max_epochs","Maximum number of epochs to train.",default=200)
@@ -66,12 +68,13 @@ if __name__ == "__main__":
     P = Parameters()
     P_z1_x = Parameters()
     encode_Z1,_,_ = model.build_unsupervised(P_z1_x,z1_input_size,z1_layer_sizes,z1_output_size)
-    P_z1_x.load(config.args.z1_file)
     classify = feedforward.build_classifier(
         P, "classifier",
         [z1_output_size], layer_sizes, output_size,
         activation=T.nnet.sigmoid
     )
+    P_z1_x.load(config.args.z1_file)
+    P.load(config.args.pretrain_file)
 
     X = T.matrix('X')
     Y = T.ivector('Y')
@@ -145,7 +148,7 @@ if __name__ == "__main__":
                 train(learning_rate,start,end)
 
     
-    learning_rate = 0.001
+    learning_rate = 0.08
     best_score = np.inf
     
     logging.debug("Starting training process...")
@@ -159,14 +162,14 @@ if __name__ == "__main__":
             logging.debug("score < best_score, saving model.")
             best_score = score
             P.save(config.args.temporary_file)
-            update_vars.save("update_vars.tmp")
+            update_vars.save(config.args.learning_file)
 
         if score/_best_score > 0.999 and epoch > 0:
             learning_rate *= 0.5
             logging.debug("Halving learning rate. learning_rate = " + str(learning_rate))
             logging.debug("Loading previous model.")
             P.load(config.args.temporary_file)
-            update_vars.load("update_vars.tmp")
+            update_vars.load(config.args.learning_file)
 
         if learning_rate < 1e-6: break
         
