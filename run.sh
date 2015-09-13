@@ -79,12 +79,13 @@ ctx_files=($dir/pkl/train_ctx.*.pklgz)
 
 for layer in -1
 do
-	for ccoeff in {0.1,0.5}
+	for ccoeff in 0.1 #,0.1,0.2,0.3,0.4,0.5}
 	do
-		for surface in norm
+		for surface in raw norm
 		do
 #			for spread in {1.5,2.0,2.5}
 #			do
+#				model_name=ctx_phoneme_gaussian_tsne_layer--1_coeff-0.1-init_norm_spread-1.5
 				model_name=phoneme_gaussian_tsne_layer-${layer}_coeff-${ccoeff}-init_${surface}
 				#_spread-${spread}
 				mkdir -p $dir/$model_name/
@@ -107,7 +108,7 @@ do
 					--minibatch 128 --max-epochs 200               \
 					--constraint-layer $layer --constraint-coeff $ccoeff \
 					--constraint-surface $surface \
-					--constraint-spread $spread
+					--constraint-spread 1
 
 #				mkdir $dir/$model_name/log-fine
 #				[ -f $dir/$model_name/dnn-fine.pkl ] || \
@@ -172,8 +173,6 @@ do
 						--spk2utt $data_fmllr/train/spk2utt \
 						--output-file $dir/$model_name/ctx_stats.pkl
 
-
-
 				[ -f $dir/class.counts ] ||\
 					ali-to-pdf $ali_dir/final.mdl "ark:gunzip -c $ali_dir/ali.*.gz |" ark:- \
 					| analyze-counts --binary=false ark:- $dir/class.counts || exit 1;
@@ -185,8 +184,8 @@ do
 						| $feat_transform \
 						| python2 $TK_DIR/nnet_forward.py $structure $dir/$model_name/dnn.pkl $dir/class.counts"
 
-					[ -d $dir/$model_name/decode_${set} ] || \
-						$TK_DIR/decode_dnn.sh --nj 1 \
+#					[ -d $dir/$model_name/decode_${set} ] || \
+					$TK_DIR/decode_dnn.sh --nj 1 \
 						--scoring-opts "--min-lmwt 1 --max-lmwt 8" \
 						--norm-vars true \
 						$gmmdir/graph $data_fmllr/${set} \

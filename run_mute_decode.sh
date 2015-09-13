@@ -90,6 +90,16 @@ do
 				| analyze-counts --binary=false ark:- $dir/class.counts || exit 1;
 			for phn in {0..47}	
 			do
+
+				[ -f $dir/$model_name/class_stats_${phn}.pkl ] || \
+					python -u $TK_DIR/test.py \
+						--frames-files ${frame_files[@]} \
+						--labels-files ${label_files[@]} \
+						--model-file   $dir/$model_name/dnn.pkl \
+						--mute-phoneme $phn \
+						--structure $structure \
+						--output-file  $dir/$model_name/class_stats_${phn}.pkl
+
 				for set in dev test
 				do
 
@@ -106,6 +116,15 @@ do
 						"$feats"
 				done
 			done
+			python -u $TK_DIR/test.py \
+				--frames-files ${frame_files[@]} \
+				--labels-files ${label_files[@]} \
+				--model-file   $dir/$model_name/dnn.pkl \
+				--mute-phoneme -1 \
+				--structure $structure \
+				--output-file  $dir/$model_name/class_stats.pkl
+
 		done
 	done
 done
+

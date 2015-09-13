@@ -184,8 +184,7 @@ do
 						| $feat_transform \
 						| python2 $TK_DIR/nnet_forward.py $structure $dir/$model_name/dnn.pkl $dir/class.counts"
 
-					[ -d $dir/$model_name/decode_${set} ] || \
-						$TK_DIR/decode_dnn.sh --nj 1 \
+					$TK_DIR/decode_dnn.sh --nj 1 \
 						--scoring-opts "--min-lmwt 1 --max-lmwt 8" \
 						--norm-vars true \
 						$gmmdir/graph $data_fmllr/${set} \
