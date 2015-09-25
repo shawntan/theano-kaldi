@@ -5,10 +5,8 @@ if __name__ == "__main__":
     config.parser.description = "theano-kaldi script for pretraining models using stacked denoising autoencoders."
     config.file_sequence("frames_files",".pklgz file containing audio frames.")
     config.file_sequence("validation_frames_files","Validation set frames file.")
-    config.structure("structure_z1","Structure of M1.")
     config.structure("structure","Structure of discriminative model.")
 
-    config.file("z1_file","Z1 params file.")
     config.file("output_file","Output file.")
     config.file("temporary_file","Temporary file.")
 
@@ -21,7 +19,6 @@ import feedforward
 import numpy as np
 import math
 import data_io
-import model
 import cPickle as pickle
 from itertools import izip, chain
 from theano_toolkit import updates
@@ -46,42 +43,44 @@ def cost(x,recon_x,kl_divergence):
     else:
         return -T.mean(T.sum(x * T.log(recon_x) + (1 - x) * T.log(1 - recon_x), axis=1))
 
+
 if __name__ == "__main__":
 
     frames_files     = config.args.frames_files
     val_frames_files = config.args.validation_frames_files
     minibatch_size = config.args.minibatch
 
-    input_size = z1_input_size = config.args.structure_z1[0]
-    z1_layer_sizes = config.args.structure_z1[1:-1]
-    z1_output_size = config.args.structure_z1[-1]
+    input_size  = config.args.structure[0]
+    layer_sizes = config.args.structure[1:-1]
+    output_size = config.args.structure[-1]
 
-    layer_sizes     = config.args.structure[:-1]
-    output_size     = config.args.structure[-1]
-    
+    def make_split_stream(frames_files):
+        return [ data_io.zip_streams(
+                    data_io.context(
+                        data_io.stream_file(frames_file),
+                        left=5,right=5
+                    )
+                 ) for frames_file in frames_files ]
+
+
     P = Parameters()
-    P_z1_x = Parameters()
-    encode_Z1,_,_ = model.build_unsupervised(P_z1_x,z1_input_size,z1_layer_sizes,z1_output_size)
-    P_z1_x.load(config.args.z1_file)
     classify = feedforward.build_classifier(
         P, "classifier",
-        [z1_output_size], layer_sizes, output_size,
+        [input_size], layer_sizes, output_size,
         activation=T.nnet.sigmoid
     )
 
-    X_shared = theano.shared(np.zeros((1,input_size),dtype=theano.config.floatX))
+    X_shared = theano.shared(np.zeros((1,1),dtype=theano.config.floatX))
     X = T.matrix('X')
     start_idx = T.iscalar('start_idx')
     end_idx = T.iscalar('end_idx')
 
-    Z1,_,_ = encode_Z1([X])
-    layers,_ = classify([Z1])
-    Z1.name = "Z1"
+    layers,_ = classify([X])
     
     pretrain_functions = []
        
 
-    inputs = [Z1] + layers[:-1]
+    inputs = [X] + layers[:-1]
     
     # Make smaller.
     W = P["W_classifier_input_0"]
@@ -89,7 +88,7 @@ if __name__ == "__main__":
 
     Ws = [P["W_classifier_input_0"]] + [P["W_classifier_%d"%i] for i in xrange(1,len(layers))] 
     bs = [P["b_classifier_input"]] + [P["b_classifier_%d"%i] for i in xrange(1,len(layers))]
-    sizes = [z1_output_size] + layer_sizes[:-1]
+    sizes = [input_size] + layer_sizes[:-1]
     for layer,W,b,size in zip(inputs,Ws,bs,sizes):
         logging.debug("Compiling functions for layer %s"%layer)
         b_rec = theano.shared(
@@ -101,11 +100,11 @@ if __name__ == "__main__":
                 reconstruct(
                     corrupt(layer),
                     W,b,b_rec,
-                    input_layer = (layer.name == 'Z1')
+                    input_layer = (layer.name == 'X')
                 ),
-                kl_divergence = (layer.name != 'Z1')
+                kl_divergence = (layer.name != 'X')
             )
-        lr = 0.003 if layer.name == 'Z1'  else 0.01
+        lr = 0.003 if layer.name == 'X'  else 0.01
         parameters = [W,b,b_rec]
         gradients  = T.grad(loss,wrt=parameters)
         train = theano.function(
@@ -122,7 +121,7 @@ if __name__ == "__main__":
         logging.debug("Done compiling for layer %s"%layer)
 
     def run_train(train):
-        split_streams = [ data_io.stream(f) for f in frames_files ]
+        split_streams = make_split_stream(frames_files)
         stream = data_io.random_select_stream(*split_streams)
         stream = data_io.buffered_random(stream)
         total_frames = 0
@@ -137,7 +136,7 @@ if __name__ == "__main__":
     def run_test(test):
         total_errors = 0
         total_frames = 0
-        split_streams = [ data_io.stream(f) for f in val_frames_files ]
+        split_streams = make_split_stream(val_frames_files)
         for f in chain(*split_streams):
             total_errors += f.shape[0] * test(f)
             total_frames += f.shape[0]

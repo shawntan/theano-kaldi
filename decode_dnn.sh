@@ -58,7 +58,6 @@ sdata=$data/split$nj;
 thread_string=
 [ $num_threads -gt 1 ] && thread_string="-parallel --num-threads=$num_threads"
 
-splice_opts=`cat $srcdir/splice_opts 2>/dev/null` # frame-splicing options.
 
 mkdir -p $dir/log
 split_data.sh $data $nj || exit 1;
@@ -75,12 +74,6 @@ $cmd $dir/log/class_count.log \
   ali-to-pdf $alidir/final.mdl "ark:gunzip -c $alidir/ali.*.gz |" ark:- \| \
     analyze-counts --binary=false ark:- $dir/class.counts || exit 1;
 
-## Set up the features
-echo "$0: feature: splice(${splice_opts}) norm_vars(${norm_vars})"
-
-#feats="apply-cmvn --norm-vars=$norm_vars --utt2spk=ark:$sdata/JOB/utt2spk scp:$sdata/JOB/cmvn.scp scp:$sdata/JOB/feats.scp ark:- | splice-feats $splice_opts ark:- ark,t:- |"
-##
-#finalfeats="$feats nnet-forward --class-frame-counts=$dir/class.counts --apply-log=true --no-softmax=false $srcdir/dnn.nnet ark:- ark:- |"
 finalfeats="ark,s,cs:$featstring |"
 $cmd JOB=1:$nj $dir/log/decode.JOB.log \
   latgen-faster-mapped --max-active=$max_active --beam=$beam --lattice-beam=$latbeam --acoustic-scale=$acwt --allow-partial=true --word-symbol-table=$graphdir/words.txt $alidir/final.mdl $graphdir/HCLG.fst "$finalfeats" "ark:|gzip -c > $dir/lat.JOB.gz"

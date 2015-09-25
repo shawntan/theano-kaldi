@@ -24,25 +24,31 @@ def build_classifier(
         P, name,
         input_sizes, hidden_sizes, output_size,
         initial_weights=initial_weights,
-        activation=T.nnet.sigmoid):
+        activation=T.nnet.sigmoid,
+        output_activation=T.nnet.softmax):
+
     combine_inputs = build_combine_transform(
             P,"%s_input"%name,
             input_sizes,hidden_sizes[0],
             initial_weights=initial_weights,
             activation=activation
         )
+
     transforms = build_stacked_transforms(P,name,hidden_sizes,
             initial_weights=initial_weights,
             activation=activation)
+
     output = build_transform(
         P,"%s_output"%name,hidden_sizes[-1],output_size,
         initial_weights=lambda x,y:np.zeros((x,y)),
-        activation=T.nnet.softmax
+        activation=output_activation
     )
+
     def classify(Xs):
         hidden_0 = combine_inputs(Xs)
         hiddens = transforms(hidden_0)
         return hiddens,output(hiddens[-1])
+
     return classify
 
 
@@ -78,7 +84,7 @@ def build_transform(
     b = P["b_%s"%name]
     def transform(X):
         output = activation(T.dot(X, W) + b)
-        output.name = name
+        if hasattr(output,"name"): output.name = name
         return output
     return transform
 

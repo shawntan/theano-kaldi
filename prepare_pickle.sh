@@ -24,8 +24,8 @@ spk2utt_file=$data_dir/spk2utt
 
 total_lines=$(wc -l <${spk2utt_file})
 ((lines_per_file = (total_lines + num_jobs - 1) / num_jobs))
-cat $data_dir/spk2utt | cut -d' ' -f1 | shuf | split -d --lines=${lines_per_file} - "$tmp_dir/spkrs."
-
+cat $data_dir/spk2utt | cut -d' ' -f1 | shuf --random-source=$log_dir/rand | split -d --lines=${lines_per_file} - "$tmp_dir/spkrs."
+ 
 ls $tmp_dir/spkrs.* | xargs -n 1 -P $num_jobs sh -c '
 filename=$1
 echo "Starting job... $filename"
@@ -43,6 +43,11 @@ idx=${filename##*.}
 		| ali-to-pdf "'"$ali_dir"'/final.mdl" ark:- ark,t:- \
 		| grep -F -f $filename \
 		| python2 "'$TK_DIR'/pickle_ali.py" "'"$output_prefix"'_lbl.$idx.pklgz"
+
+	gunzip -c $( ls '"$ali_dir"'/ali.*.gz | sort -V ) \
+		| ali-to-phones --per-frame "'"$ali_dir"'/final.mdl" ark:- ark,t:- \
+		| grep -F -f $filename \
+		| python2 "'$TK_DIR'/pickle_ali.py" "'"$output_prefix"'_phn.$idx.pklgz"
 
 } > "'$log_dir'/split.$idx.log" 2>&1
 echo "Done."

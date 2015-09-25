@@ -1,8 +1,6 @@
 if __name__ == "__main__":
     import config
-    config.structure("structure_z1","Structure of M1.")
     config.structure("structure","Structure of discriminative model.")
-    config.file("z1_file","Z1 params file.")
     config.file("model",".pkl file containing discriminative model.")
     config.file("class_counts",".counts file giving counts of all the pdfs.")
     config.parse_args()
@@ -11,7 +9,7 @@ import theano.tensor as T
 import ark_io
 import numpy as np
 import model
-
+import data_io
 import cPickle as pickle
 
 import sys
@@ -20,24 +18,22 @@ from theano_toolkit.parameters import Parameters
 def ark_stream():
     return ark_io.parse(sys.stdin)
 
-def create_model(counts,input_size,z1_layer_sizes,z1_output_size,layer_sizes,output_size):
-    z1_input_size = input_size
+def create_model(counts,input_size,layer_sizes,output_size):
     X = T.matrix('X')
     P = Parameters()
-    P_z1_x = Parameters()
-    encode_Z1,_,_ = model.build_unsupervised(P_z1_x,z1_input_size,z1_layer_sizes,z1_output_size)
+
     classify = feedforward.build_classifier(
         P, "classifier",
-        [z1_output_size], layer_sizes, output_size,
+        [input_size], layer_sizes, output_size,
         activation=T.nnet.sigmoid
     )
-    Z1,_,_ = encode_Z1([X])
-    _,output = classify([Z1])
-    P_z1_x.load(config.args.z1_file)
+
+    _,output = classify([X])
+    log_output = T.log(output)
     P.load(config.args.model)
     f = theano.function(
             inputs = [X],
-            outputs = T.log(output) - T.log(counts/T.sum(counts))
+            outputs = log_output - T.log(counts/T.sum(counts))
         )
     return f
 
@@ -59,14 +55,13 @@ if __name__ == "__main__":
  
     predict = create_model(
             counts = counts,
-            input_size = config.args.structure_z1[0],
-            z1_layer_sizes = config.args.structure_z1[1:-1],
-            z1_output_size = config.args.structure_z1[-1],
-            layer_sizes    = config.args.structure[:-1],
-            output_size    = config.args.structure[-1],
+            input_size  = config.args.structure[0],
+            layer_sizes = config.args.structure[1:-1],
+            output_size = config.args.structure[-1],
         )
 
     if predict != None:
-        for name,frames in ark_stream():
+        stream = data_io.context(ark_stream(),left=5,right=5)
+        for name,frames in stream:
             print_ark(name,predict(frames))
 

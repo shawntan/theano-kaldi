@@ -1,36 +1,27 @@
 import sys
 import logging,json
-if __name__ == "__main__":
-    import config
-    config.parser.description = "theano-kaldi script for fine-tuning DNN feed-forward models."
-
-    config.file_sequence("frames_files",".pklgz file containing audio frames.")
-    config.file_sequence("labels_files",".pklgz file containing frames labels.")
-    config.file_sequence("validation_frames_files","Validation set frames file.")
-    config.file_sequence("validation_labels_files","Validation set labels file.")
-
-    config.structure("structure_z1","Structure of M1.")
-    config.structure("structure","Structure of discriminative model.")
-
-    config.file("z1_file","Z1 params file.")
-    config.file("pretrain_file","Pretrain file.")
-    config.file("output_file","Output file.")
-    config.file("temporary_file","Temporary file.")
-    config.file("learning_file","Temporary file.")
-
-    config.integer("minibatch","Minibatch size.",default=128)
-    config.integer("max_epochs","Maximum number of epochs to train.",default=200)
-
-    config.parse_args()
 
 import theano
 import theano.tensor as T
+import trainer
+if __name__ == "__main__":
+    import config
+    config.parser.description = "theano-kaldi script for fine-tuning DNN feed-forward models."
+    config.file_sequence("validation_frames_files","Validation set frames file.")
+    config.file_sequence("validation_labels_files","Validation set labels file.")
+    config.structure("structure","Structure of discriminative model.")
+    config.file("pretrain_file","Pretrain file.")
 
+    X = T.matrix('X')
+    Y = T.ivector('Y')
+    compile_train_epoch = trainer.build_train_epoch([X,Y])
+    train_loop = trainer.build_train_loop()
+
+    config.parse_args()
 import numpy as np
 import math
 
 import data_io
-import model
 import cPickle as pickle
 from pprint import pprint
 from itertools import izip, chain
@@ -39,73 +30,63 @@ from theano_toolkit.parameters import Parameters
 
 import feedforward
 
-if __name__ == "__main__":
-    frames_files    = config.args.frames_files
-    labels_files    = config.args.labels_files
-    val_frames_files = config.args.validation_frames_files
-    val_labels_files = config.args.validation_labels_files
-    minibatch_size  = config.args.minibatch
-   
-    input_size = z1_input_size = config.args.structure_z1[0]
-    z1_layer_sizes = config.args.structure_z1[1:-1]
-    z1_output_size = config.args.structure_z1[-1]
+def make_split_stream(frames_files,labels_files):
+    return [ data_io.zip_streams(
+                data_io.context(
+                    data_io.stream_file(frames_file),
+                    left=5,right=5
+                ),
+                data_io.stream_file(labels_file)
+            ) for frames_file,labels_file in izip(frames_files,labels_files) ]
 
-    layer_sizes     = config.args.structure[:-1]
-    output_size     = config.args.structure[-1]
+
+def build_data_stream(context=5):
+    def data_stream(file_sequences):
+        frames_files = file_sequences[0]
+        labels_files = file_sequences[1]
+        split_streams = make_split_stream(frames_files,labels_files) 
+        stream = data_io.random_select_stream(*split_streams)
+        stream = data_io.buffered_random(stream)
+        stream = data_io.randomise(stream)
+        return stream
+    return data_stream
+
+
+def count_frames(frames_files):    
+    split_streams = [ data_io.stream(f) for f in frames_files ]
+    return sum(f.shape[0] for f in chain(*split_streams))
+
+if __name__ == "__main__":
+    input_size  = config.args.structure[0]
+    layer_sizes = config.args.structure[1:-1]
+    output_size = config.args.structure[-1]
  
- 
-    logging.info("Training data:     " + ','.join(frames_files))
-    logging.info("Training labels:   " + ','.join(labels_files))
-    logging.info("Validation data:   " + ','.join(val_frames_files))
-    logging.info("Validation labels: " + ','.join(val_labels_files))
-    logging.info("Minibatch size:    " + str(minibatch_size))
-    logging.info("Structure:         " + ':'.join(map(str,config.args.structure)))
-    
-    X_shared = theano.shared(np.zeros((1,input_size),dtype=theano.config.floatX))
-    Y_shared = theano.shared(np.zeros((1,),dtype=np.int32))
+    training_frame_count = count_frames(config.args.X_files)
     logging.debug("Created shared variables")
 
+    
     P = Parameters()
-    P_z1_x = Parameters()
-    encode_Z1,_,_ = model.build_unsupervised(P_z1_x,z1_input_size,z1_layer_sizes,z1_output_size)
     classify = feedforward.build_classifier(
         P, "classifier",
-        [z1_output_size], layer_sizes, output_size,
+        [input_size], layer_sizes, output_size,
         activation=T.nnet.sigmoid
     )
-    P_z1_x.load(config.args.z1_file)
+    _,outputs = classify([X])
+
     P.load(config.args.pretrain_file)
-
-    X = T.matrix('X')
-    Y = T.ivector('Y')
-    start_idx = T.iscalar('start_idx')
-    end_idx = T.iscalar('end_idx')
-    lr = T.scalar('lr')
-
-
-    Z1,_,_ = encode_Z1([X])
-    _,outputs = classify([Z1])
-
-    loss = cross_entropy = T.mean(T.nnet.categorical_crossentropy(outputs,Y))
-    logging.debug("Built model expression.")
 
     parameters = P.values() 
     logging.info("Parameters to tune:" + ','.join(w.name for w in parameters))
+
+    cross_entropy = T.mean(T.nnet.categorical_crossentropy(outputs,Y))
+    loss = cross_entropy #+ (0.5/training_frame_count)  * sum(T.sum(T.sqr(w)) for w in parameters)
+    logging.debug("Built model expression.")
     
     logging.debug("Compiling functions...")
     update_vars = Parameters()
     gradients = T.grad(loss,wrt=parameters)
 
-    train = theano.function(
-            inputs  = [lr,start_idx,end_idx],
-            outputs = cross_entropy,
-            updates = updates.momentum(parameters,gradients,learning_rate=lr,P=update_vars),
-            givens  = {
-                X: X_shared[start_idx:end_idx],
-                Y: Y_shared[start_idx:end_idx]
-            }
-        )
-    
+   
     monitored_values = {
             "cross_entropy": loss,
             "classification_error":T.mean(T.neq(T.argmax(outputs,axis=1),Y))
@@ -117,11 +98,17 @@ if __name__ == "__main__":
         )
 
     logging.debug("Done.")
-
+    
+    run_train = compile_train_epoch(
+            parameters,gradients,update_vars,
+            data_stream=build_data_stream(context=5)
+        )
     def run_test():
         total_errors = None
         total_frames = 0
-        split_streams = [ data_io.stream(f,l) for f,l in izip(val_frames_files,val_labels_files) ]
+
+        split_streams = make_split_stream(config.args.validation_frames_files,
+                                            config.args.validation_labels_files) 
         for f,l in chain(*split_streams):
             if total_errors is None:
                 total_errors = np.array(test(f,l),dtype=np.float32)
@@ -131,52 +118,4 @@ if __name__ == "__main__":
         values = total_errors/total_frames
         return { k:float(v) for k,v in zip(monitored_keys,values) }
 
-    def run_train():
-        split_streams = [ data_io.stream(f,l) for f,l in izip(frames_files,labels_files) ]
-        stream = data_io.random_select_stream(*split_streams)
-        stream = data_io.buffered_random(stream)
-
-        total_frames = 0
-        for f,l,size in data_io.randomise(stream):
-            total_frames += f.shape[0]
-            X_shared.set_value(f)
-            Y_shared.set_value(l)
-            batch_count = int(math.ceil(size/float(minibatch_size)))
-            for idx in xrange(batch_count):
-                start = idx*minibatch_size
-                end = min((idx+1)*minibatch_size,size)
-                train(learning_rate,start,end)
-
-    
-    learning_rate = 0.08
-    best_score = np.inf
-    
-    logging.debug("Starting training process...")
-    for epoch in xrange(config.args.max_epochs):
-        scores = run_test()
-        score = scores['cross_entropy']
-        logging.info("Epoch " + str(epoch) + " results: " + json.dumps(scores))
-        _best_score = best_score
-
-        if score < _best_score:
-            logging.debug("score < best_score, saving model.")
-            best_score = score
-            P.save(config.args.temporary_file)
-            update_vars.save(config.args.learning_file)
-
-        if score/_best_score > 0.999 and epoch > 0:
-            learning_rate *= 0.5
-            logging.debug("Halving learning rate. learning_rate = " + str(learning_rate))
-            logging.debug("Loading previous model.")
-            P.load(config.args.temporary_file)
-            update_vars.load(config.args.learning_file)
-
-        if learning_rate < 1e-6: break
-        
-        logging.info("Epoch %d training."%(epoch + 1))
-        run_train()
-        logging.info("Epoch %d training done."%(epoch + 1))
-
-    P.load(config.args.temporary_file)
-    P.save(config.args.output_file)
-    logging.debug("Done training process.")
+    train_loop(logging,run_test,run_train,P,update_vars,monitor_score="cross_entropy")

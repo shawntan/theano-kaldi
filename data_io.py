@@ -16,12 +16,27 @@ def context(stream,left=5,right=5):
         length = frames.shape[0]
         if length > idxs.shape[0]:
             idxs = np.arange(length).reshape(length,1) + np.arange(left + 1 + right)
-
         frames = np.concatenate([left_buf,frames,right_buf])
         frames = frames[idxs[:length]]
         frames = frames.reshape(length, (left + 1 + right) * dim)
-
         yield name,frames
+
+def splice(stream,left=5,right=5):
+    left_buf = right_buf = None
+    idxs = np.arange(1000).reshape(1000,1) + np.arange(left + 1 + right)
+    for frames in stream:
+        dim = frames.shape[1]
+        if left_buf is None:
+            left_buf = np.zeros((left,dim),dtype=np.float32)
+            right_buf = np.zeros((right,dim),dtype=np.float32)
+        length = frames.shape[0]
+        if length > idxs.shape[0]:
+            idxs = np.arange(length).reshape(length,1) + np.arange(left + 1 + right)
+        frames = np.concatenate([left_buf,frames,right_buf])
+        frames = frames[idxs[:length]]
+        frames = frames.reshape(length, (left + 1 + right) * dim)
+        yield frames
+
 
 def stream_file(filename,open_method=gzip.open):
     with open_method(filename,'rb') as fd:
