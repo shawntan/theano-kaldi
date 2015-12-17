@@ -7,7 +7,7 @@ gmmdir=exp/tri3
 ali_dir=${gmmdir}_ali
 
 # Output folder
-dir=exp/dnn_fbank_tk_feedforward_nosplice
+dir=exp/dnn_fbank_tk_feedforward
 
 # Create directories
 [ -d $dir ]      || mkdir -p $dir
@@ -38,13 +38,14 @@ done
 # Initial preprocessing for input features
 [ -f $dir/feature_transform ] || \
     copy-feats scp:$dir/data/train/feats.scp ark:- \
+    | add-deltas --delta-order=$(cat $dir/delta_order) ark:- ark:- \
     | compute-cmvn-stats ark:- - \
     | cmvn-to-nnet --binary=false - $dir/feature_transform  || exit 1;
 
 # Reading -> Transforming -> Writing to pickle
 feat_transform="\
-nnet-forward $dir/feature_transform ark:- ark:- |\
-add-deltas --delta-order=$(cat $dir/delta_order) ark:- ark,t:- \
+add-deltas --delta-order=$(cat $dir/delta_order) ark:- ark:- |\
+nnet-forward $dir/feature_transform ark:- ark,t:- \
 "
 
 [ -f $dir/pkl/train.00.pklgz ] ||\
@@ -76,7 +77,7 @@ model_name=nosplice
 # Look at using log-normal distribution for the distribution of x
 
 [ -f $dir/pretrain.${model_name}.pkl ] || \
-    THEANO_FLAGS=device=gpu0 python -u $TK_DIR/pretrain_sda.py \
+    THEANO_FLAGS=device=gpu1 python -u $TK_DIR/pretrain_sda.py \
     --frames-files            ${frame_files[@]:2} \
     --validation-frames-files ${frame_files[@]:0:2}   \
     --structure               $discriminative_structure \
@@ -85,12 +86,12 @@ model_name=nosplice
     --minibatch 128 --max-epochs 2  \
     --log - #$dir/_log/train_${model_name}.log
 
-[ -f $dir/discriminative.${model_name}.pkl ] || \
-    THEANO_FLAGS=device=gpu0 python -u $TK_DIR/train.py \
-    --X-files                 ${frame_files[@]:1}     \
-    --Y-files                 ${label_files[@]:1}   \
-    --validation-frames-files ${frame_files[@]:0:1}   \
-    --validation-labels-files ${label_files[@]:0:1}        \
+#[ -f $dir/discriminative.${model_name}.pkl ] || \
+    THEANO_FLAGS=device=gpu1 python -u $TK_DIR/train.py \
+    --X-files                 ${frame_files[@]:1}    \
+    --Y-files                 ${label_files[@]:1}    \
+    --validation-frames-files ${frame_files[@]:0:1}  \
+    --validation-labels-files ${label_files[@]:0:1}  \
     --structure               $discriminative_structure \
     --temporary-file          $dir/discriminative.${model_name}.pkl.tmp \
     --output-file             $dir/discriminative.${model_name}.pkl \
@@ -122,9 +123,3 @@ do
         ${gmmdir}_ali $dir/decode_${set}_${model_name}\
         "$feats"
 done
-
-for x in exp/dnn_fbank_tk_feedforward_nosplice/decode*
-do 
-    [ -d $x ] && \
-        echo $x | grep "${1:-.*}" >/dev/null && grep Sum $x/score_*/*.sys 2>/dev/null | utils/best_wer.sh
-done | grep $model_name

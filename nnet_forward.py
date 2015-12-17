@@ -4,6 +4,7 @@ if __name__ == "__main__":
     config.file("model",".pkl file containing discriminative model.")
     config.file("class_counts",".counts file giving counts of all the pdfs.")
     config.parse_args()
+
 import theano
 import theano.tensor as T
 import ark_io
@@ -22,13 +23,8 @@ def create_model(counts,input_size,layer_sizes,output_size):
     X = T.matrix('X')
     P = Parameters()
 
-    classify = feedforward.build_classifier(
-        P, "classifier",
-        [input_size], layer_sizes, output_size,
-        activation=T.nnet.sigmoid
-    )
-
-    _,output = classify([X])
+    classify = model.build(P,input_size,layer_sizes,output_size)
+    output = classify(X)
     log_output = T.log(output)
     P.load(config.args.model)
     f = theano.function(

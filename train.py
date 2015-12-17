@@ -28,7 +28,7 @@ from itertools import izip, chain
 from theano_toolkit import updates
 from theano_toolkit.parameters import Parameters
 
-import feedforward
+import model
 
 def make_split_stream(frames_files,labels_files):
     return [ data_io.zip_streams(
@@ -52,10 +52,18 @@ def build_data_stream(context=5):
     return data_stream
 
 
-def count_frames(frames_files):    
+def count_frames(frames_files):
     split_streams = [ data_io.stream(f) for f in frames_files ]
     return sum(f.shape[0] for f in chain(*split_streams))
 
+def crossentropy(output,Y):
+    if output.owner.op == T.nnet.softmax_op:
+        x = output.owner.inputs[0]
+        k = T.max(x,axis=1,keepdims=True)
+        sum_x = T.log(T.sum(T.exp(x - k),axis=1)) + k
+        return - x[T.arange(x.shape[0]),Y] + sum_x
+    else:
+        return T.nnet.categorical_crossentropy(outputs,Y)
 if __name__ == "__main__":
     input_size  = config.args.structure[0]
     layer_sizes = config.args.structure[1:-1]
@@ -64,33 +72,31 @@ if __name__ == "__main__":
     training_frame_count = count_frames(config.args.X_files)
     logging.debug("Created shared variables")
 
-    
+
     P = Parameters()
-    classify = feedforward.build_classifier(
-        P, "classifier",
-        [input_size], layer_sizes, output_size,
-        activation=T.nnet.sigmoid
-    )
-    _,outputs = classify([X])
+    classify = model.build(P,input_size,layer_sizes,output_size)
+    outputs = classify(X)
+
 
     P.load(config.args.pretrain_file)
 
     parameters = P.values() 
     logging.info("Parameters to tune:" + ','.join(w.name for w in parameters))
 
-    cross_entropy = T.mean(T.nnet.categorical_crossentropy(outputs,Y))
+    cross_entropy = T.mean(crossentropy(outputs,Y))
     loss = cross_entropy #+ (0.5/training_frame_count)  * sum(T.sum(T.sqr(w)) for w in parameters)
     logging.debug("Built model expression.")
-    
+
     logging.debug("Compiling functions...")
     update_vars = Parameters()
     gradients = T.grad(loss,wrt=parameters)
 
-   
+
     monitored_values = {
             "cross_entropy": loss,
             "classification_error":T.mean(T.neq(T.argmax(outputs,axis=1),Y))
         }
+
     monitored_keys = monitored_values.keys()
     test = theano.function(
             inputs = [X,Y],
@@ -98,7 +104,7 @@ if __name__ == "__main__":
         )
 
     logging.debug("Done.")
-    
+
     run_train = compile_train_epoch(
             parameters,gradients,update_vars,
             data_stream=build_data_stream(context=5)
