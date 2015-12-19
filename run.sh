@@ -7,33 +7,19 @@ gmmdir=exp/tri3
 ali_dir=${gmmdir}_ali
 
 # Output folder
-dir=exp/dnn_fbank_tk_feedforward
+dir=exp/dnn_mfcc_tk_feedforward
 
 # Create directories
 [ -d $dir ]      || mkdir -p $dir
-[ -d $dir/data ] || mkdir -p $dir/data
 [ -d $dir/pkl ]  || mkdir -p $dir/pkl
-
+[ -d $dir/data ] || ln -s ../../data $dir/data
 
 # Settings
 num_jobs=20
 norm_vars=true
 splice_opts=`cat $dir/splice_opts 2>/dev/null` # frame-splicing options.
 echo 2 > $dir/delta_order
-{
-echo "--use-energy=true"
-echo "--num-mel-bins=40"
-} > conf/fbank.conf
 
-# Create fbank data set.
-[ -d $dir/_fbank ] || (
-for set in train dev test
-do
-    cp -r data/$set $dir/data/$set
-    rm -rf $dir/data/$set/{cmvn,feats}.scp $dir/data/$set/split*
-    steps/make_fbank.sh --fbank-config conf/fbank.conf --cmd "run.pl" --nj $num_jobs $dir/data/$set $dir/_log $dir/_fbank || exit 1;
-done
-)
 
 # Initial preprocessing for input features
 [ -f $dir/feature_transform ] || \
@@ -72,7 +58,7 @@ label_files=($dir/pkl/train_lbl.?*.pklgz)
 
 input_dim=`copy-feats scp:$dir/data/train/feats.scp ark:- | eval $feat_transform | feat-to-dim ark:- -`
 
-discriminative_structure="1353:1024:1024:1024:1024:1024:1024:$num_pdfs"
+discriminative_structure="429:1024:1024:1024:1024:1024:1024:$num_pdfs"
 model_name=nosplice
 # Look at using log-normal distribution for the distribution of x
 
@@ -98,7 +84,7 @@ model_name=nosplice
     --learning-file           $dir/discriminative.${model_name}.learning\
     --pretrain-file           $dir/pretrain.${model_name}.pkl \
     --minibatch 128 --max-epochs 200  \
-    --learning-rate "0.08" \
+    --learning-rate "0.1" \
     --learning-rate-decay "0.5" \
     --learning-rate-minimum "1e-6" \
     --improvement-threshold "0.99" \
