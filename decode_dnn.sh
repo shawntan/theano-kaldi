@@ -16,8 +16,8 @@ cmd=run.pl
 num_threads=1
 
 max_active=7000 # max-active
-beam=15.0 # beam used
-latbeam=7.0 # beam used in getting lattices
+beam=18.0 # beam used
+latbeam=10.0 # beam used in getting lattices
 acwt=0.1 # acoustic weight used in getting lattices
 max_arcs=-1
 

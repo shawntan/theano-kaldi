@@ -62,7 +62,10 @@ def zip_streams(*streams,**kwargs):
     with_name = kwargs.get('with_name',False)
     while True:
         items = [ s.next() for s in streams ]
-        assert(all(x[0]==items[0][0] for x in items))
+        #assert(all(x[0]==items[0][0] for x in items))
+        while not all(x[0]==items[0][0] for x in items):
+            print "skip"
+            items[0] = streams[0].next()
         result = tuple(x[1] for x in items)
 
         if with_name:

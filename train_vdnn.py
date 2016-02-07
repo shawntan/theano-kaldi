@@ -11,6 +11,7 @@ if __name__ == "__main__":
     config.file_sequence("validation_labels_files","Validation set labels file.")
     config.structure("structure","Structure of discriminative model.")
     config.file("pretrain_file","Pretrain file.",default="")
+    config.real("prior_alpha","Parameter for dirichlet prior",default=0.15)
 
     X = T.matrix('X')
     Y = T.ivector('Y')
@@ -28,7 +29,7 @@ from itertools import izip, chain
 from theano_toolkit import updates
 from theano_toolkit.parameters import Parameters
 
-import model
+import vdnn
 
 def make_split_stream(frames_files,labels_files):
     return [ data_io.zip_streams(
@@ -74,57 +75,42 @@ if __name__ == "__main__":
 
 
     P = Parameters()
-    classify = model.build(P,input_size,layer_sizes,output_size)
-
-    outputs_test = classify(X,training=False)
-    cross_entropy_test = T.mean(crossentropy(outputs_test,Y))
-
-    monitored_values = {
-            "cross_entropy": cross_entropy_test,
-            "classification_error":T.mean(T.neq(T.argmax(outputs_test,axis=1),Y))
-        }
-
-    monitored_keys = monitored_values.keys()
-
-    test = theano.function(
-            inputs = [X,Y],
-            outputs = [ monitored_values[k] for k in monitored_keys ]
-        )
-
-
-    outputs = classify(X,training=True)
-    cross_entropy = T.mean(crossentropy(outputs,Y))
+    _, model_cost,_ = vdnn.build(P,input_size,layer_sizes,output_size)
+    cross_entropy, prior_cost, crossentropies = model_cost(X,Y)
 
     if config.args.pretrain_file != "":
-        P.load(config.args.pretrain_file)
+        p.load(config.args.pretrain_file)
 
     parameters = P.values() 
-    logging.info("Parameters to tune:" + ','.join(w.name for w in parameters))
-
-
-    loss = cross_entropy #+ (0.5/training_frame_count)  * sum(T.sum(T.sqr(w)) for w in parameters)
+    logging.info("Parameters to tune:" + ','.join(w.name for w in parameters)) 
+    loss = cross_entropy \
+            + config.args.prior_alpha * prior_cost \
+            + (0.5/training_frame_count) * sum(T.sum(T.sqr(w)) for w in parameters)
     logging.debug("Built model expression.")
 
     logging.debug("Compiling functions...")
     update_vars = Parameters()
     gradients = T.grad(loss,wrt=parameters)
 
-    logging.debug("Done.")
 
-    def strat(parameters, gradients, learning_rate=1e-3, P=None):
-        return updates.momentum(parameters,gradients,
-                mu=0.1,
-                learning_rate=learning_rate,
-                P=P
-            )
+    monitored_values = {
+            "cross_entropy": cross_entropy,
+        }
+
+    monitored_keys = monitored_values.keys()
+    test = theano.function(
+            inputs = [X,Y],
+            outputs = [ monitored_values[k] for k in monitored_keys ]
+        )
+
+    logging.debug("Done.")
 
     run_train = compile_train_epoch(
             parameters,gradients,update_vars,
             data_stream=build_data_stream(context=5),
-#            update_strategy=strat,
-#            outputs=[cross_entropy,cross_entropy_test]#[ T.sqrt(T.sum(w**2)) for w in gradients ]
+#            update_strategy=updates.adam,
+#            outputs=crossentropies + [cross_entropy]
         )
-
     def run_test():
         total_errors = None
         total_frames = 0

@@ -9,7 +9,7 @@ import theano
 import theano.tensor as T
 import ark_io
 import numpy as np
-import model
+import vdnn 
 import data_io
 import cPickle as pickle
 
@@ -23,9 +23,8 @@ def create_model(counts,input_size,layer_sizes,output_size):
     X = T.matrix('X')
     P = Parameters()
 
-    classify = model.build(P,input_size,layer_sizes,output_size)
-    output = classify(X)
-    log_output = T.log(output)
+    _,_,model_log_dist = vdnn.build(P,input_size,layer_sizes,output_size)
+    log_output = model_log_dist(X)
     P.load(config.args.model)
     f = theano.function(
             inputs = [X],
