@@ -9,7 +9,9 @@ if __name__ == "__main__":
     config.parser.description = "theano-kaldi script for fine-tuning DNN feed-forward models."
     config.file_sequence("validation_frames_files","Validation set frames file.")
     config.file_sequence("validation_labels_files","Validation set labels file.")
-    config.structure("structure","Structure of discriminative model.")
+    config.structure("speaker_structure","Structure of speaker model.")
+    config.structure("acoustic_structure","Structure of acoustic model.")
+    config.structure("decoder_structure","Structure of decoder.")
     config.file("pretrain_file","Pretrain file.",default="")
 
     X = T.matrix('X')
@@ -28,7 +30,7 @@ from itertools import izip, chain
 from theano_toolkit import updates
 from theano_toolkit.parameters import Parameters
 
-import model
+import sep_vae
 
 def make_split_stream(frames_files,labels_files):
     return [ data_io.zip_streams(
@@ -60,35 +62,35 @@ def count_frames(labels_files,output_size):
         np.add.at(label_count,l,1)
     return frame_count,label_count
 
-def crossentropy(output,Y):
-    if output.owner.op == T.nnet.softmax_op:
-        x = output.owner.inputs[0]
-        k = T.max(x,axis=1,keepdims=True)
-        sum_x = T.log(T.sum(T.exp(x - k),axis=1)) + k
-        return - x[T.arange(x.shape[0]),Y] + sum_x
-    else:
-        return T.nnet.categorical_crossentropy(outputs,Y)
-
 if __name__ == "__main__":
     input_size  = config.args.structure[0]
     layer_sizes = config.args.structure[1:-1]
     output_size = config.args.structure[-1]
-
+ 
     training_frame_count, training_label_count = count_frames(config.args.Y_files,output_size)
     logging.debug("Created shared variables")
 
 
     P = Parameters()
-    classify = model.build(P,input_size,layer_sizes,output_size)
+    training_cost,classification_cost = sep_vae.build(P,
+            input_size,[2048,2048,2048,2048],64,
+            output_size,[2048]
+        )
+    logging.debug(str(training_label_count))
+    P['b_y_model_decoder_output'].set_value(np.log(training_label_count))
 
-    _, outputs_test  = classify(X,training=False)
-    cross_entropy_test = T.mean(crossentropy(outputs_test,Y))
+    prior_cost,z_divergence,x_recon_cost,y_recon_cost = training_cost(X,Y)
+    training_loss = prior_cost + z_divergence + x_recon_cost + y_recon_cost
+    classification_loss, zero_one_loss  = classification_cost(X,Y)
 
     monitored_values = {
-            "cross_entropy": cross_entropy_test,
-            "classification_error":T.mean(T.neq(T.argmax(outputs_test,axis=1),Y))
+            "training_loss": training_loss,
+            "z_divergence":z_divergence,
+            "x_recon_cost":x_recon_cost,
+            "y_recon_cost":y_recon_cost,
+            "cross_entropy":classification_loss,
+            "errors":zero_one_loss
         }
-
     monitored_keys = monitored_values.keys()
 
     test = theano.function(
@@ -97,9 +99,6 @@ if __name__ == "__main__":
         )
 
 
-    _, outputs = classify(X,training=True)
-    cross_entropy = T.mean(crossentropy(outputs,Y))
-
     if config.args.pretrain_file != "":
         P.load(config.args.pretrain_file)
 
@@ -107,7 +106,8 @@ if __name__ == "__main__":
     logging.info("Parameters to tune:" + ','.join(w.name for w in parameters))
 
 
-    loss = cross_entropy + (0.5/training_frame_count)  * sum(T.sum(T.sqr(w)) for w in parameters)
+    loss = training_loss + \
+            (0.5/training_frame_count) * sum(T.sum(T.sqr(w)) for w in parameters)
     logging.debug("Built model expression.")
 
     logging.debug("Compiling functions...")
@@ -116,20 +116,18 @@ if __name__ == "__main__":
 
     logging.debug("Done.")
 
-    def strat(parameters, gradients, learning_rate=1e-3, P=None):
-        return [ (p, p - learning_rate * g) 
-                    for p,g in zip(parameters,gradients) ]
-#        return updates.momentum(parameters,gradients,
-#                mu=0.0,
-#                learning_rate=learning_rate,
-#                P=P
-#            )
+#    def strat(parameters, gradients, learning_rate=1e-3, norm_ceil=10, P=None):
+#        norm = T.sqrt(sum(T.sum(T.sqr(g)) for g in gradients))
+#        factor = T.switch(norm < norm_ceil,1,norm_ceil/norm)
+#        gradients = [ g * factor for g in gradients ]
+#        return updates.adam(parameters,gradients,learning_rate=learning_rate)
 
     run_train = compile_train_epoch(
             parameters,gradients,update_vars,
             data_stream=build_data_stream(context=5),
-#            update_strategy=strat,
-#            outputs=[cross_entropy,cross_entropy_test]#[ T.sqrt(T.sum(w**2)) for w in gradients ]
+            update_strategy=updates.adam,
+#           outputs=[z_divergence,x_recon_cost,y_recon_cost,classification_loss]
+#           outputs=[cross_entropy,cross_entropy_test]#[ T.sqrt(T.sum(w**2)) for w in gradients ]
         )
 
     def run_test():
@@ -146,5 +144,4 @@ if __name__ == "__main__":
         values = total_errors/total_frames
         return { k:float(v) for k,v in zip(monitored_keys,values) }
 
-    P.b_classifier_output.set_value(np.log(training_label_count))
     train_loop(logging,run_test,run_train,P,update_vars,monitor_score="cross_entropy")

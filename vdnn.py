@@ -20,13 +20,15 @@ def log_sigmoid(x):
 
 
 def build_layer_outputs(P,name,layer_sizes,output_size):
+    
+    P["b_%s"%name] = np.zeros((output_size,),dtype=np.float32)
+    b = P["b_%s"%name]
+    def build_output(layer_no,input_size):
+        P["W_output_%s_%d"%(name,layer_no)] = np.zeros((input_size,output_size),dtype=np.float32)
+        W = P["W_output_%s_%d"%(name,layer_no)]
+        return lambda x:T.nnet.softmax(T.dot(x,W) + b)
 
-    output_transforms = [ feedforward.build_transform(
-                                P,"%s_output_%d"%(name,i),
-                                size,output_size,
-                                initial_weights=lambda x,y:np.zeros((x,y)),
-                                activation=T.nnet.softmax
-                            ) for i,size in enumerate(layer_sizes) ]
+    output_transforms = [ build_output(i,size) for i,size in enumerate(layer_sizes) ]
     gate_transforms = [
             feedforward.build_transform(
                     P,"gate_%d"%i,
@@ -34,6 +36,7 @@ def build_layer_outputs(P,name,layer_sizes,output_size):
                     initial_weights=lambda x,y:np.zeros((x,y)),
                     activation=lambda x: log_sigmoid(x)
                 ) for i,size in enumerate(layer_sizes[:-1]) ]
+
 
     def gate_output_pairs(hiddens):
         outputs = [ ot(h) for ot,h in zip(output_transforms,hiddens) ]

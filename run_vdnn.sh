@@ -33,7 +33,7 @@ label_files=($dir/pkl/train_lbl.?*.pklgz)
 
 for alpha in {0.01,0.10,0.15,0.20,0.25}
 do
-    model_name=vdnn_relu_separate_${alpha}
+    model_name=vdnn_separate_${alpha}_adam
     THEANO_FLAGS=device=gpu0 python -u $TK_DIR/train_vdnn.py \
         --X-files                 ${frame_files[@]:1}    \
         --Y-files                 ${label_files[@]:1}    \
@@ -44,11 +44,12 @@ do
         --output-file             $dir/discriminative.${model_name}.pkl \
         --learning-file           $dir/discriminative.${model_name}.learning\
         --minibatch 128 --max-epochs 200  \
-        --learning-rate "0.5" \
+        --learning-rate "1" \
         --learning-rate-decay "0.5" \
         --learning-rate-minimum "1e-8" \
-        --improvement-threshold "0.99" \
+        --improvement-threshold "0.999" \
         --prior-alpha "$alpha" \
+        --pretrain-file $dir/pretrain.nosplice.pkl \
         --log - #$dir/_log/train_${model_name}.log
         #--pretrain-file           $dir/pretrain.${model_name}.pkl \
     for set in test

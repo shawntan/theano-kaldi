@@ -23,8 +23,8 @@ def build(P,input_size,layer_sizes,output_size):
     def initial_weights(input_size,output_size,factor=4):
         return np.asarray(
           np.random.uniform(
-             low  = -factor * np.sqrt(6 / (0.5 * input_size + output_size)),
-             high =  factor * np.sqrt(6 / (0.5 * input_size + output_size)),
+             low  = -factor * np.sqrt(6 / (input_size + output_size)),
+             high =  factor * np.sqrt(6 / (input_size + output_size)),
              size =  (input_size,output_size)
           ),
           dtype=theano.config.floatX
@@ -39,8 +39,8 @@ def build(P,input_size,layer_sizes,output_size):
 
     def predict(X,training=False):
         state['training'] = training
-        _,outputs = classifier([X])
-        return outputs
+        hiddens, outputs = classifier([X])
+        return hiddens, outputs
     return predict
 
 
@@ -54,4 +54,3 @@ if __name__ == "__main__":
         )
     print f(np.eye(10).astype(np.float32))
 
-    

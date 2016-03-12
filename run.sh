@@ -60,17 +60,19 @@ discriminative_structure="440:2048:2048:2048:2048:2048:2048:2048:$num_pdfs"
 model_name=nosplice
 # Look at using log-normal distribution for the distribution of x
 
-#[ -f $dir/discriminative.${model_name}.pkl ] || \
-    THEANO_FLAGS=device=gpu0 python -u $TK_DIR/pretrain_sda.py \
-    --frames-files            ${frame_files[@]:2} \
-    --validation-frames-files ${frame_files[@]:0:2}   \
+#[ -f $dir/pretrain.${model_name}.pkl ] || \
+    THEANO_FLAGS=device=gpu0 python -u $TK_DIR/pretrain_discriminative.py \
+    --X-files                 ${frame_files[@]:2}    \
+    --Y-files                 ${label_files[@]:2}    \
+    --validation-frames-files ${frame_files[@]:0:2}  \
+    --validation-labels-files ${label_files[@]:0:2}  \
     --structure               $discriminative_structure \
-    --temporary-file          $dir/pretrain.${model_name}.pkl.tmp \
-    --output-file             $dir/pretrain.${model_name}.pkl \
-    --minibatch 256 --max-epochs 1  \
+    --output-file           $dir/pretrain.${model_name}.pkl \
+    --minibatch 512 \
     --log - #$dir/_log/train_${model_name}.log
 
 
+#[ -f $dir/discriminative.${model_name}.pkl ] || \
     THEANO_FLAGS=device=gpu0 python -u $TK_DIR/train.py \
     --X-files                 ${frame_files[@]:1}    \
     --Y-files                 ${label_files[@]:1}    \
@@ -81,7 +83,7 @@ model_name=nosplice
     --output-file             $dir/discriminative.${model_name}.pkl \
     --learning-file           $dir/discriminative.${model_name}.learning\
     --minibatch 256 --max-epochs 200  \
-    --learning-rate "0.9" \
+    --learning-rate "0.08" \
     --learning-rate-decay "0.5" \
     --learning-rate-minimum "1e-6" \
     --improvement-threshold "0.99" \

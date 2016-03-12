@@ -5,6 +5,20 @@ import numpy as np
 from itertools import izip
 import random
 
+def augment_speaker_id(stream,utt2spk_file):
+    mapping = {}
+    spk_ids = {}
+    for line in open(utt2spk_file,'r'):
+        utt_id,spk_id = line.strip().split()
+        if spk_id not in spk_ids:
+            idx = spk_ids[spk_id] = len(spk_ids)
+        else:
+            idx = spk_ids[spk_id]
+        mapping[utt_id] = idx
+    for name, frames in stream:
+        spkr_lbls = np.full(frames.shape[0],mapping[name],dtype=np.int32)
+        yield name, spkr_lbls
+
 def context(stream,left=5,right=5):
     left_buf = right_buf = None
     idxs = np.arange(1000).reshape(1000,1) + np.arange(left + 1 + right)
@@ -15,7 +29,8 @@ def context(stream,left=5,right=5):
             right_buf = np.zeros((right,dim),dtype=np.float32)
         length = frames.shape[0]
         if length > idxs.shape[0]:
-            idxs = np.arange(length).reshape(length,1) + np.arange(left + 1 + right)
+            idxs = np.arange(length).reshape(length,1) +\
+                    np.arange(left + 1 + right)
         frames = np.concatenate([left_buf,frames,right_buf])
         frames = frames[idxs[:length]]
         frames = frames.reshape(length, (left + 1 + right) * dim)
@@ -31,7 +46,8 @@ def splice(stream,left=5,right=5):
             right_buf = np.zeros((right,dim),dtype=np.float32)
         length = frames.shape[0]
         if length > idxs.shape[0]:
-            idxs = np.arange(length).reshape(length,1) + np.arange(left + 1 + right)
+            idxs = np.arange(length).reshape(length,1) + \
+                    np.arange(left + 1 + right)
         frames = np.concatenate([left_buf,frames,right_buf])
         frames = frames[idxs[:length]]
         frames = frames.reshape(length, (left + 1 + right) * dim)

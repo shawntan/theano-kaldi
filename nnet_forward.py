@@ -24,7 +24,7 @@ def create_model(counts,input_size,layer_sizes,output_size):
     P = Parameters()
 
     classify = model.build(P,input_size,layer_sizes,output_size)
-    output = classify(X)
+    _,output = classify(X)
     log_output = T.log(output)
     P.load(config.args.model)
     f = theano.function(

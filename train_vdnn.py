@@ -79,7 +79,7 @@ if __name__ == "__main__":
     cross_entropy, prior_cost, crossentropies = model_cost(X,Y)
 
     if config.args.pretrain_file != "":
-        p.load(config.args.pretrain_file)
+        P.load(config.args.pretrain_file)
 
     parameters = P.values() 
     logging.info("Parameters to tune:" + ','.join(w.name for w in parameters)) 
@@ -105,10 +105,14 @@ if __name__ == "__main__":
 
     logging.debug("Done.")
 
+    def strat(parameters, gradients, learning_rate=1e-3, P=None):
+        return [ (p, p - learning_rate * g) 
+                    for p,g in zip(parameters,gradients) ]
+
     run_train = compile_train_epoch(
             parameters,gradients,update_vars,
             data_stream=build_data_stream(context=5),
-#            update_strategy=updates.adam,
+            update_strategy=strat,
 #            outputs=crossentropies + [cross_entropy]
         )
     def run_test():
