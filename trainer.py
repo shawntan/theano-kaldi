@@ -25,6 +25,7 @@ def build_train_epoch(data_variables):
     for var in data_variables:
         config.file_sequence("%s_files"%var,".pklgz file containing %s."%var)
     config.integer("minibatch","Minibatch size.",default=512)
+    learning_curve = open("learning_curve",'w',buffering=1)
     def compile_train_epoch(parameters,gradients,update_vars,outputs=None,data_stream=data_stream,
             update_strategy=updates.momentum):
         file_sequences = [ getattr(config.args,"%s_files"%var) for var in data_variables ]
@@ -47,15 +48,15 @@ def build_train_epoch(data_variables):
             for item in stream:
                 size = item[-1]
                 total_frames += item[0].shape[0]
-                batch_count = int(math.ceil(size/float(minibatch_size)))
+                batch_count = int(math.floor(size/float(minibatch_size)))
                 for shared_var,data in izip(shared_variables,item[:-1]):
                     shared_var.set_value(data)
 
                 for idx in xrange(batch_count):
                     start = idx*minibatch_size
                     end = min((idx+1)*minibatch_size,size)
-                    if outputs:
-                        print np.array(train(learning_rate,start,end))
+                    if outputs is not None:
+                        print >> learning_curve, train(learning_rate,start,end)
                     else:
                         train(learning_rate,start,end)
         return run_train
@@ -97,17 +98,17 @@ def build_train_loop():
                 P.save(temporary_model_file)
                 update_vars.save(update_parameters_file)
 
-#            logging.debug("Best score:" + str(_best_score))
-#            logging.debug("Score:" + str(score))
-#            logging.debug((_best_score - score)/_best_score)
             if (_best_score - score)/_best_score < (1 - improvement_threshold) and epoch > 0:
                 learning_rate *= learning_rate_decay
                 logging.debug("Halving learning rate. learning_rate = " + str(learning_rate))
-                logging.debug("Loading previous model.")
-                P.load(temporary_model_file)
-                update_vars.load(update_parameters_file)
+
+                if score > _best_score:
+                    logging.debug("Loading previous model.")
+                    P.load(temporary_model_file)
+                    update_vars.load(update_parameters_file)
 
             if learning_rate < learning_rate_minimum: break
+
             logging.info("Epoch %d training."%(epoch + 1))
             run_train(learning_rate)
             logging.info("Epoch %d training done."%(epoch + 1))

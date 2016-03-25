@@ -97,7 +97,7 @@ def build_encoder_output(P, name, input_size, output_size, initialise_weights=No
             )
 
         if samples == -1:
-            eps = U.theano_rng.normal(size=(std.shape[0], output_size))
+            eps = U.theano_rng.normal(size=std.shape)
         else:
             eps = U.theano_rng.normal(size=(std.shape[0], samples, output_size))
             std = std.dimshuffle(0, 'x', 1)

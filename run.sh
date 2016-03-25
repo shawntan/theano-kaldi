@@ -68,7 +68,7 @@ model_name=nosplice
     --validation-labels-files ${label_files[@]:0:2}  \
     --structure               $discriminative_structure \
     --output-file           $dir/pretrain.${model_name}.pkl \
-    --minibatch 512 \
+    --minibatch 256 \
     --log - #$dir/_log/train_${model_name}.log
 
 
@@ -83,10 +83,10 @@ model_name=nosplice
     --output-file             $dir/discriminative.${model_name}.pkl \
     --learning-file           $dir/discriminative.${model_name}.learning\
     --minibatch 256 --max-epochs 200  \
-    --learning-rate "0.08" \
-    --learning-rate-decay "0.5" \
+    --learning-rate 0.08 \
+    --learning-rate-decay "0.7" \
     --learning-rate-minimum "1e-6" \
-    --improvement-threshold "0.99" \
+    --improvement-threshold "0.999" \
     --pretrain-file           $dir/pretrain.${model_name}.pkl \
     --log - #$dir/_log/train_${model_name}.log
 

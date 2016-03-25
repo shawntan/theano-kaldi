@@ -35,7 +35,7 @@ echo "$0 $@"  # Print the command line for logging
 [ -f ./path.sh ] && . ./path.sh; # source the path.
 . parse_options.sh || exit 1;
 
-if [ $# != 4 ]; then
+if [ $# != 5 ]; then
    echo "Usage: $0 [options] <graph-dir> <data-dir> <decode-dir>"
    echo "... where <decode-dir> is assumed to be a sub-directory of the directory"
    echo " where the DNN and transition model is."
@@ -62,7 +62,7 @@ graphdir=$1
 data=$2
 dir=$3
 feat_transform=$4
-[ -z $srcdir ] && srcdir=`dirname $dir`; # Default model directory one level up from decoding directory.
+srcdir=$5
 sdata=$data/split$nj;
 
 mkdir -p $dir/log

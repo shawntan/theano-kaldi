@@ -62,6 +62,26 @@ def stream_file(filename,open_method=gzip.open):
                 yield x
         except EOFError: pass
 
+def async(stream):
+    import threading
+    import Queue
+    queue = Queue.Queue(maxsize=200)
+    end_marker = object()
+    def producer():
+        for item in stream:
+            queue.put(item)
+        queue.put(end_marker)
+
+    thread = threading.Thread(target=producer)
+    thread.daemon = True
+    thread.start()
+    # run as consumer
+    item = queue.get()
+    while item is not end_marker:
+        yield item
+        queue.task_done()
+        item = queue.get()
+
 def stream(*filenames,**kwargs):
     gens = [ stream_file(f) for f in filenames ]
     return zip_streams(*gens,**kwargs)
@@ -80,8 +100,8 @@ def zip_streams(*streams,**kwargs):
         items = [ s.next() for s in streams ]
         #assert(all(x[0]==items[0][0] for x in items))
         while not all(x[0]==items[0][0] for x in items):
-            print "skip"
-            items[0] = streams[0].next()
+            for i in xrange(len(items)-1):
+                items[i] = streams[i].next()
         result = tuple(x[1] for x in items)
 
         if with_name:
@@ -91,7 +111,7 @@ def zip_streams(*streams,**kwargs):
         else:
             yield result
 
-def buffered_random(stream,buffer_items=20 * 8,leak_percent=0.9):
+def buffered_random(stream,buffer_items=100,leak_percent=0.9):
     item_buffer = [None] * buffer_items
     leak_count = int(buffer_items * leak_percent)
     item_count = 0
@@ -107,7 +127,16 @@ def buffered_random(stream,buffer_items=20 * 8,leak_percent=0.9):
         random.shuffle(item_buffer)
         for item in item_buffer: yield item
 
-def randomise(stream,buffer_size=2**17):
+def chunk(stream,chunk_size=32):
+    import math
+    for item in stream:
+        chunks = int(math.ceil(item[0].shape[0]/float(chunk_size)))
+        for i in xrange(chunks):
+            yield tuple(
+                    x[i*chunk_size:(i+1)*chunk_size]  for x in item) 
+
+
+def randomise(stream,buffer_size=2**20):
     buf = None
     buf_instances = 0
     for item in stream:
@@ -142,58 +171,24 @@ def randomise(stream,buffer_size=2**17):
         randomise_buffers()
         yield tuple(buf) + (buf_instances,)
 
-import threading
-def randomise_threaded(stream,buffer_size=2**16):
-    class RunScope:
-        def __init__(self):
-            self.buf  = None
-            self.buf_tmp = None
-            self.done = False
-            self.buf_instances = 0
-        def loader_shuffler(self):
-            try:
-                self.buf_instances = 0
-                while True:
-                    item = stream.next()
-                    if self.buf == None:
-                        self.buf = [ np.zeros((buffer_size,) + x.shape[1:],dtype=x.dtype)
-                                for x in item ]
-                        self.buf_tmp = [ np.zeros((buffer_size,) + x.shape[1:],dtype=x.dtype)
-                                for x in item ]
-
-                    if self.buf_instances + item[0].shape[0] < buffer_size:
-                        for i in xrange(len(self.buf)):
-                            self.buf[i][self.buf_instances:self.buf_instances+item[0].shape[0]] = item[i]
-                        self.buf_instances += item[0].shape[0]
-                    else:
-                        break
-            except StopIteration:
-                self.done = True
-            idxs = np.arange(self.buf_instances)
-            np.random.shuffle(idxs)
-            for i in xrange(len(self.buf)): self.buf[i][:self.buf_instances]  = self.buf[i][idxs]
-    t = RunScope()
-    worker = threading.Thread(target=t.loader_shuffler)
-    worker.start()
-    while not t.done:
-        worker.join()
-        tmp_instance_count = t.buf_instances
-        t.buf,t.buf_tmp = t.buf_tmp,t.buf
-        if not t.done:
-            worker = threading.Thread(target=t.loader_shuffler)
-            worker.start()
-        yield tuple(t.buf_tmp) + (tmp_instance_count,)
-
 if __name__ == "__main__":
-    import time
-    from itertools import chain
-    data_streams = [ stream("/home/shawn/kaldi-trunk-2/egs/timit/s5/exp/dnn_fbank_tk_feedforward/pkl/train.0%d.pklgz"%i) 
-            for i in xrange(10) ]
-    
-    randomised_stream = randomise_threaded(chain(*data_streams))
-    for value in randomised_stream:
-        print "begin sleeping"
-        time.sleep(1)
-        print "end sleeping"
+    import time ,io
+    filename = "/home/shawn/kaldi/egs/aurora4/s5/exp/dnn_lda_tk_feedforward/pkl/train.%02d.pklgz"
+    def buffered_open(filename,mode):
+        file_buf = open(filename,mode=mode,buffering=2**16)
+        return gzip.GzipFile(mode=mode,fileobj=file_buf)
 
+    start_time = time.time()
+    for i in xrange(17):
+        for x in async(stream_file(filename%i)):
+            time.sleep(0.001)
+    end_time = time.time()
+    print end_time - start_time
+
+    start_time = time.time()
+    for i in xrange(17):
+        for x in stream_file(filename%i):
+            time.sleep(0.001)
+    end_time = time.time()
+    print end_time - start_time
 

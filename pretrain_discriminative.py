@@ -59,7 +59,7 @@ if __name__ == "__main__":
     logging.debug("Created shared variables")
 
     P = Parameters()
-    classify = model.build(P,input_size,layer_sizes,output_size)
+    classify = model.build(P,input_size,layer_sizes,output_size,dropout=0.5)
     P_tmp = Parameters()
     intermediate_outputs = build_intermediate_outputs(P_tmp,layer_sizes,output_size)
 
@@ -92,7 +92,7 @@ if __name__ == "__main__":
         run_train = compile_train_epoch(
                 parameters,gradients,update_vars,
                 data_stream=build_data_stream(context=5),
-#                update_strategy=strat
+                update_strategy=strat
             )
         def make_run_test():
             monitored_values = {
@@ -121,17 +121,18 @@ if __name__ == "__main__":
 
         trainers.append(run_train)
         testers.append(make_run_test())
-    
 
     best_ce = np.inf
     for run_train,run_test in zip(trainers,testers):
         while True:
-            run_train(0.08)
+            run_train(0.1)
             results = run_test()
             logging.info("Results: " + json.dumps(results))
             if results["cross_entropy"] < best_ce:
                 best_ce = results["cross_entropy"]
                 break
-
         logging.debug("Next layer.")
+    logging.info("Results: " + json.dumps(results))
+    P.W_classifier_output.set_value(P_tmp.W_pretrain_output_6.get_value())
+    P.b_classifier_output.set_value(P_tmp.b_pretrain_output_6.get_value())
     P.save(config.args.output_file)

@@ -35,13 +35,16 @@ from theano_toolkit.parameters import Parameters
 
 import spkr_vae
 from itertools import tee
+
 def make_split_stream(frames_files,utt2spk_file):
     streams = []
     for frames_file in frames_files:
         stream1, stream2 = tee(data_io.stream_file(frames_file))
         frame_stream = data_io.context(stream1,left=5,right=5)
         spkr_stream = data_io.augment_speaker_id(stream2,utt2spk_file)
-        streams.append(data_io.zip_streams(frame_stream,spkr_stream))
+        stream = data_io.zip_streams(frame_stream,spkr_stream)
+        stream = data_io.buffered_random(stream)
+        streams.append(stream)
     return streams
 
 
@@ -95,7 +98,6 @@ if __name__ == "__main__":
     acoustic_latent_cost,speaker_latent_cost,\
                     speaker_prior_cost, recon_cost = training_cost(X,Y)
     training_loss = acoustic_latent_cost + speaker_latent_cost + recon_cost + speaker_prior_cost
-#                    (0.5/training_frame_count) * sum(T.sum(T.sqr(w)) for w in parameters)
     monitored_values = {
             "training_loss": training_loss,
             "acoustic_latent_cost": acoustic_latent_cost,
@@ -117,7 +119,9 @@ if __name__ == "__main__":
     logging.info("Parameters to tune:" + ','.join(w.name for w in parameters))
 
 
-    loss = training_loss
+    loss = training_loss +\
+                    (0.5/training_frame_count) * sum(T.sum(T.sqr(w)) for w in parameters)
+
     logging.debug("Built model expression.")
 
     logging.debug("Compiling functions...")
