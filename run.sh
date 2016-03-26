@@ -7,7 +7,7 @@ gmmdir=exp/tri3
 ali_dir=${gmmdir}_ali
 
 # Output folder
-dir=exp/dnn_fbank_tk_feedforward
+dir=exp/dnn_fbank_tk_feedforward_nosplice_1
 
 # Create directories
 [ -d $dir ]      || mkdir -p $dir

@@ -75,7 +75,7 @@ if __name__ == "__main__":
 
     P = Parameters()
     classify = model.build(P,input_size,layer_sizes,output_size)
-    outputs = classify(X)
+    outputs, recon_cost  = classify(X)
 
 
     P.load(config.args.pretrain_file)
@@ -84,7 +84,9 @@ if __name__ == "__main__":
     logging.info("Parameters to tune:" + ','.join(w.name for w in parameters))
 
     cross_entropy = T.mean(crossentropy(outputs,Y))
-    loss = cross_entropy #+ (0.5/training_frame_count)  * sum(T.sum(T.sqr(w)) for w in parameters)
+    mean_recon_cost = T.mean(recon_cost)
+    loss = cross_entropy + 0.005 * mean_recon_cost +\
+            (0.5/training_frame_count)  * sum(T.sum(T.sqr(w)) for w in parameters)
     logging.debug("Built model expression.")
 
     logging.debug("Compiling functions...")
@@ -93,7 +95,7 @@ if __name__ == "__main__":
 
 
     monitored_values = {
-            "cross_entropy": loss,
+            "cross_entropy": cross_entropy,
             "classification_error":T.mean(T.neq(T.argmax(outputs,axis=1),Y))
         }
 
@@ -107,7 +109,8 @@ if __name__ == "__main__":
 
     run_train = compile_train_epoch(
             parameters,gradients,update_vars,
-            data_stream=build_data_stream(context=5)
+            data_stream=build_data_stream(context=5),
+            outputs=[cross_entropy,mean_recon_cost]
         )
     def run_test():
         total_errors = None
