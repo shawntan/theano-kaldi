@@ -15,6 +15,7 @@ def file_sequence(var_name,description="",default=None):
             default = default,
             help = description
         )
+    
 def file(var_name,description="",default=None):
     arg_name = var_name.replace("_","-")
     parser.add_argument(

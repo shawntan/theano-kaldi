@@ -97,7 +97,7 @@ def randomise(stream,buffer_size=2**17):
         if buf == None:
             buf = [
                     np.zeros((buffer_size,) + x.shape[1:],dtype=x.dtype)
-                    for x in item 
+                    for x in item
                 ]
             def randomise_buffers():
                 idxs = np.arange(buf_instances)
@@ -122,48 +122,6 @@ def randomise(stream,buffer_size=2**17):
     if len(buf[0]) > 0:
         randomise_buffers()
         yield tuple(buf) + (buf_instances,)
-
-import threading
-def randomise_threaded(stream,buffer_size=2**16):
-    class RunScope:
-        def __init__(self):
-            self.buf  = None
-            self.buf_tmp = None
-            self.done = False
-            self.buf_instances = 0
-        def loader_shuffler(self):
-            try:
-                self.buf_instances = 0
-                while True:
-                    item = stream.next()
-                    if self.buf == None:
-                        self.buf = [ np.zeros((buffer_size,) + x.shape[1:],dtype=x.dtype)
-                                for x in item ]
-                        self.buf_tmp = [ np.zeros((buffer_size,) + x.shape[1:],dtype=x.dtype)
-                                for x in item ]
-
-                    if self.buf_instances + item[0].shape[0] < buffer_size:
-                        for i in xrange(len(self.buf)):
-                            self.buf[i][self.buf_instances:self.buf_instances+item[0].shape[0]] = item[i]
-                        self.buf_instances += item[0].shape[0]
-                    else:
-                        break
-            except StopIteration:
-                self.done = True
-            idxs = np.arange(self.buf_instances)
-            np.random.shuffle(idxs)
-            for i in xrange(len(self.buf)): self.buf[i][:self.buf_instances]  = self.buf[i][idxs]
-    t = RunScope()
-    worker = threading.Thread(target=t.loader_shuffler)
-    worker.start()
-    while not t.done:
-        worker.join()
-        tmp_instance_count = t.buf_instances
-        t.buf,t.buf_tmp = t.buf_tmp,t.buf
-        if not t.done:
-            worker = threading.Thread(target=t.loader_shuffler)
-            worker.start()
-        yield tuple(t.buf_tmp) + (tmp_instance_count,)
 
 if __name__ == "__main__":
     import time
