@@ -76,12 +76,15 @@ discriminative_structure="1353:1024:1024:1024:1024:1024:1024:$num_pdfs"
 model_name=nosplice
 # Look at using log-normal distribution for the distribution of x
 
-[ -f $dir/pretrain.${model_name}.pkl ] || \
+#[ -f $dir/pretrain.${model_name}.pkl ] || \
     THEANO_FLAGS=device=gpu1 python -u $TK_DIR/pretrain_sda.py \
         --training-frame-files      ${frame_files[@]:2} \
         --validation-frame-files    ${frame_files[@]:0:2} \
         --structure                 $discriminative_structure \
-        --batch-size 256 --max-epochs 1 
+        --batch-size 256 --max-epochs 1 \
+        --improvement-threshold 0.99 \
+        --output-file $dir/pretrain.${model_name}.pkl
+
 exit
 
 #[ -f $dir/discriminative.${model_name}.pkl ] || \

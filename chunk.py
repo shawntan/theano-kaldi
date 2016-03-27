@@ -4,22 +4,26 @@ from itertools import izip
 import numpy as np
 import theano
 import theano.tensor as T
+
+batch_size = config.option("batch_size","Size of the batches.",type=config.int)
+
 def create_shared_variable(data_variable):
     shared_var = theano.shared(np.zeros((1,) * data_variable.ndim,
                                                dtype=data_variable.dtype)) 
     shared_var.name = "%s_shared"%data_variable
     return shared_var
 
-
-batch_size = config.option("batch_size","Size of the batches.",type=config.int)
-
+def create_shared_variables(inputs):
+    return { var:create_shared_variable(var)
+                for var in inputs }
 @batch_size
-def build_trainer(inputs,updates,outputs=None,batch_size=256):
+def build_trainer(inputs,updates,outputs=None,batch_size=256,mapping=None):
     """
     Creates a shared variables and a function to load chunk into shared variables and train
     """
-    mapping = { var:create_shared_variable(var)
-                for var in inputs }
+    if mapping is None:
+        mapping = create_shared_variables(inputs)
+
     idx = T.iscalar('idx')
     train = theano.function(
             inputs  = [idx],
@@ -33,7 +37,10 @@ def build_trainer(inputs,updates,outputs=None,batch_size=256):
         for in_var,data in izip(inputs,chunk):
             mapping[in_var].set_value(data)
         for i in xrange(batch_count):
-            print train(i)
+            if outputs is None:
+                train(i)
+            else:
+                print train(i)
 
     return chunk_train
 

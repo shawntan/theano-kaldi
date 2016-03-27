@@ -15,6 +15,8 @@ import frame_data
 import model
 import chunk
 import epoch_train_loop
+import validator
+import data_io
 def corrupt(x,corr=0.2):
     corr_x = theano_rng.binomial(size=x.shape,n=1,p=1-corr,dtype=theano.config.floatX) * x
     corr_x.name = "corr_" + x.name
@@ -33,18 +35,26 @@ def cost(x,recon_x,kl_divergence):
     else:
         return -T.mean(T.sum(x * T.log(recon_x) + (1 - x) * T.log(1 - recon_x), axis=1))
 
+output_file = config.option("output_file","Output of pretraining.")
+@output_file
+def save(P,output_file):
+    logging.info("Saving model.")
+    P.save(output_file)
+@output_file
+def load(P,output_file):
+    logging.info("Loading model.")
+    P.load(output_file)
+
 
 if __name__ == "__main__":
     config.parse_args()
  
-    frame_count = sum(x[0].shape[0] for x in frame_data.stream())
-    chunk_frame_count = sum(x[0].shape[0] for x in chunk.stream(frame_data.stream()))
-    print frame_count, chunk_frame_count
     P = Parameters()
     predict = model.build(P)
     X = T.matrix('X')
     layers,_ = predict(X)
     
+
     inputs = [X] + layers[:-1]
     # Make smaller.
     W = P["W_classifier_input_0"]
@@ -55,6 +65,8 @@ if __name__ == "__main__":
     sizes = [ W.get_value().shape[0] for W in Ws ]
     
     train_fns = []
+    validation_fns = []
+    shared_variables_mapping = chunk.create_shared_variables([X])
     for layer,W,b,size in zip(inputs,Ws,bs,sizes):
         logging.debug("Compiling functions for layer %s"%layer)
         b_rec = theano.shared(
@@ -76,17 +88,36 @@ if __name__ == "__main__":
         train_fns.append(
             chunk.build_trainer(
                 inputs=[X],
-                outputs=loss,
-                updates=updates.momentum(parameters,gradients,learning_rate=lr)
+#                outputs=loss,
+                updates=updates.momentum(parameters,gradients,learning_rate=lr),
+                mapping=shared_variables_mapping
+            )
+        )
+        validation_fns.append(
+            validator.build(
+                inputs=[X],
+                outputs={"loss":loss},
+                monitored_var="loss",
+                validation_stream=frame_data.validation_stream,
+                best_score_callback=lambda:save(P)
             )
         )
         logging.info("Done compiling for layer %s"%layer)
-   
-    for train_fn in train_fns:
+
+    save(P)
+    for train_fn,validation_fn in zip(train_fns,validation_fns):
+        load(P)
+        def epoch_callback(epoch):
+            logging.info("Epoch %d validation."%epoch)
+            validation_fn()
+        epoch_callback(0)
         epoch_train_loop.loop(
-                get_data_stream=lambda:chunk.stream(frame_data.stream()),
+                get_data_stream=lambda:data_io.async(
+                    chunk.stream(frame_data.training_stream()),
+                    queue_size=2
+                ),
                 item_action=train_fn,
-                epoch_callback=lambda x: logging.debug(x)
+                epoch_callback=epoch_callback
             )
 
 #    P.save(config.args.output_file)

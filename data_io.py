@@ -29,10 +29,10 @@ def stream_file(filename,open_method=gzip.open):
                 yield x
         except EOFError: pass
 
-def async(stream):
+def async(stream,queue_size):
     import threading
     import Queue
-    queue = Queue.Queue(maxsize=200)
+    queue = Queue.Queue(maxsize=queue_size)
     end_marker = object()
     def producer():
         for item in stream:
@@ -91,68 +91,10 @@ def buffered_random(stream,buffer_items=100,leak_percent=0.9):
         random.shuffle(item_buffer)
         for item in item_buffer: yield item
 
-def chunk(stream,chunk_size=32):
+def chop(stream,piece_size=32):
     import math
     for item in stream:
-        chunks = int(math.ceil(item[0].shape[0]/float(chunk_size)))
-        for i in xrange(chunks):
+        pieces = int(math.ceil(item[0].shape[0]/float(piece_size)))
+        for i in xrange(pieces):
             yield tuple(
-                    x[i*chunk_size:(i+1)*chunk_size]  for x in item) 
-
-
-def randomise(stream,buffer_size=2**20):
-    buf = None
-    buf_instances = 0
-    for item in stream:
-        if type(item) is not tuple:
-            item = (item,)
-        if buf == None:
-            buf = [
-                    np.zeros((buffer_size,) + x.shape[1:],dtype=x.dtype)
-                    for x in item 
-                ]
-            def randomise_buffers():
-                idxs = np.arange(buf_instances)
-                np.random.shuffle(idxs)
-                rng_state = np.random.get_state()
-                for i in xrange(len(buf)):
-                    np.random.set_state(rng_state)
-                    np.random.shuffle(buf[i][:buf_instances])
-
-        if buf_instances + item[0].shape[0] > buffer_size:
-#            print "Buffer size reached: ",buf_instances
-#            print "Shuffling...",
-            randomise_buffers()
-            yield tuple(buf) + (buf_instances,)
-#            print "dispatched."
-            buf_instances = 0
-        else:
-#            print "Copying to buffer", (buf_instances,buf_instances+feats.shape[0])
-            for i in xrange(len(buf)):
-                buf[i][buf_instances:buf_instances+item[0].shape[0]] = item[i]
-            buf_instances += item[0].shape[0]
-    if len(buf[0]) > 0:
-        randomise_buffers()
-        yield tuple(buf) + (buf_instances,)
-
-if __name__ == "__main__":
-    import time ,io
-    filename = "/home/shawn/kaldi/egs/aurora4/s5/exp/dnn_lda_tk_feedforward/pkl/train.%02d.pklgz"
-    def buffered_open(filename,mode):
-        file_buf = open(filename,mode=mode,buffering=2**16)
-        return gzip.GzipFile(mode=mode,fileobj=file_buf)
-
-    start_time = time.time()
-    for i in xrange(17):
-        for x in async(stream_file(filename%i)):
-            time.sleep(0.001)
-    end_time = time.time()
-    print end_time - start_time
-
-    start_time = time.time()
-    for i in xrange(17):
-        for x in stream_file(filename%i):
-            time.sleep(0.001)
-    end_time = time.time()
-    print end_time - start_time
-
+                    x[i*piece_size:(i+1)*piece_size]  for x in item) 

@@ -6,5 +6,5 @@ def loop(get_data_stream,item_action,epoch_callback,max_epochs):
         for x in get_data_stream():
             item_action(x)
         epoch_count += 1
-        if epoch_callback(epoch_count) or epoch_count == max_epochs:
+        if not epoch_callback(epoch_count) or epoch_count == max_epochs:
             break
