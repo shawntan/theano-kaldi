@@ -1,30 +1,20 @@
 import sys
 import logging,json
-if __name__ == "__main__":
-    import config
-    config.parser.description = "theano-kaldi script for pretraining models using stacked denoising autoencoders."
-    config.file_sequence("frames_files",".pklgz file containing audio frames.")
-    config.file_sequence("validation_frames_files","Validation set frames file.")
-    config.structure("structure","Structure of discriminative model.")
-
-    config.file("output_file","Output file.")
-    config.file("temporary_file","Temporary file.")
-
-    config.integer("minibatch","Minibatch size.",default=128)
-    config.integer("max_epochs","Maximum number of epochs to train.",default=20)
-    config.parse_args()
 import theano
 import theano.tensor as T
-import feedforward
 import numpy as np
 import math
-import data_io
 import cPickle as pickle
 from itertools import izip, chain
 from theano_toolkit import updates
 from theano_toolkit.parameters import Parameters
 theano_rng = T.shared_randomstreams.RandomStreams(np.random.RandomState(1234).randint(2**30))
 
+import config
+import frame_data
+import model
+import chunk
+import epoch_train_loop
 def corrupt(x,corr=0.2):
     corr_x = theano_rng.binomial(size=x.shape,n=1,p=1-corr,dtype=theano.config.floatX) * x
     corr_x.name = "corr_" + x.name
@@ -45,50 +35,26 @@ def cost(x,recon_x,kl_divergence):
 
 
 if __name__ == "__main__":
-
-    frames_files     = config.args.frames_files
-    val_frames_files = config.args.validation_frames_files
-    minibatch_size = config.args.minibatch
-
-    input_size  = config.args.structure[0]
-    layer_sizes = config.args.structure[1:-1]
-    output_size = config.args.structure[-1]
-
-    def make_split_stream(frames_files):
-        return [ data_io.zip_streams(
-                    data_io.context(
-                        data_io.stream_file(frames_file),
-                        left=5,right=5
-                    )
-                 ) for frames_file in frames_files ]
-
-
+    config.parse_args()
+ 
+    frame_count = sum(x[0].shape[0] for x in frame_data.stream())
+    chunk_frame_count = sum(x[0].shape[0] for x in chunk.stream(frame_data.stream()))
+    print frame_count, chunk_frame_count
     P = Parameters()
-    classify = feedforward.build_classifier(
-        P, "classifier",
-        [input_size], layer_sizes, output_size,
-        activation=T.nnet.sigmoid
-    )
-
-    X_shared = theano.shared(np.zeros((1,1),dtype=theano.config.floatX))
+    predict = model.build(P)
     X = T.matrix('X')
-    start_idx = T.iscalar('start_idx')
-    end_idx = T.iscalar('end_idx')
-
-    layers,_ = classify([X])
+    layers,_ = predict(X)
     
-    pretrain_functions = []
-       
-
     inputs = [X] + layers[:-1]
-    
     # Make smaller.
     W = P["W_classifier_input_0"]
     W.set_value(W.get_value()/4)
 
     Ws = [P["W_classifier_input_0"]] + [P["W_classifier_%d"%i] for i in xrange(1,len(layers))] 
     bs = [P["b_classifier_input"]] + [P["b_classifier_%d"%i] for i in xrange(1,len(layers))]
-    sizes = [input_size] + layer_sizes[:-1]
+    sizes = [ W.get_value().shape[0] for W in Ws ]
+    
+    train_fns = []
     for layer,W,b,size in zip(inputs,Ws,bs,sizes):
         logging.debug("Compiling functions for layer %s"%layer)
         b_rec = theano.shared(
@@ -107,56 +73,20 @@ if __name__ == "__main__":
         lr = 0.003 if layer.name == 'X'  else 0.01
         parameters = [W,b,b_rec]
         gradients  = T.grad(loss,wrt=parameters)
-        train = theano.function(
-                inputs = [start_idx,end_idx],
-                outputs = loss,
-                updates = updates.momentum(parameters,gradients,learning_rate=lr),
-                givens  = {
-                    X: X_shared[start_idx:end_idx],
-                }
+        train_fns.append(
+            chunk.build_trainer(
+                inputs=[X],
+                outputs=loss,
+                updates=updates.momentum(parameters,gradients,learning_rate=lr)
             )
-        test = theano.function(inputs=[X],outputs=loss)
+        )
+        logging.info("Done compiling for layer %s"%layer)
+   
+    for train_fn in train_fns:
+        epoch_train_loop.loop(
+                get_data_stream=lambda:chunk.stream(frame_data.stream()),
+                item_action=train_fn,
+                epoch_callback=lambda x: logging.debug(x)
+            )
 
-        pretrain_functions.append((train,test))
-        logging.debug("Done compiling for layer %s"%layer)
-
-    def run_train(train):
-        split_streams = make_split_stream(frames_files)
-        stream = data_io.random_select_stream(*split_streams)
-        stream = data_io.buffered_random(stream)
-        total_frames = 0
-        for f,size in data_io.randomise(stream):
-            X_shared.set_value(f)
-            batch_count = int(math.ceil(size/float(minibatch_size)))
-            for idx in xrange(batch_count):
-                start = idx*minibatch_size
-                end = min((idx+1)*minibatch_size,size)
-                train(start,end)
-
-    def run_test(test):
-        total_errors = 0
-        total_frames = 0
-        split_streams = make_split_stream(val_frames_files)
-        for f in chain(*split_streams):
-            total_errors += f.shape[0] * test(f)
-            total_frames += f.shape[0]
-        values = total_errors / total_frames
-        return values
-
-    for layer_idx,(train,test) in enumerate(pretrain_functions):    
-        logging.debug("Pretraining layer " + str(layer_idx) + "...")
-        best_score = np.inf
-        for epoch in xrange(config.args.max_epochs):
-            run_train(train)
-            score = run_test(test)
-            logging.debug("Score on validation set: " + str(score))
-            if score < best_score:
-                best_score = score
-                logging.debug("Saving model.")
-                P.save(config.args.temporary_file) 
-            else:
-                logging.debug("Layer done.")
-                P.load(config.args.temporary_file) 
-                break
-
-    P.save(config.args.output_file)
+#    P.save(config.args.output_file)

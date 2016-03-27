@@ -78,13 +78,11 @@ model_name=nosplice
 
 [ -f $dir/pretrain.${model_name}.pkl ] || \
     THEANO_FLAGS=device=gpu1 python -u $TK_DIR/pretrain_sda.py \
-    --frames-files            ${frame_files[@]:2} \
-    --validation-frames-files ${frame_files[@]:0:2}   \
-    --structure               $discriminative_structure \
-    --temporary-file          $dir/pretrain.${model_name}.pkl.tmp \
-    --output-file             $dir/pretrain.${model_name}.pkl \
-    --minibatch 128 --max-epochs 2  \
-    --log - #$dir/_log/train_${model_name}.log
+        --training-frame-files      ${frame_files[@]:2} \
+        --validation-frame-files    ${frame_files[@]:0:2} \
+        --structure                 $discriminative_structure \
+        --batch-size 256 --max-epochs 1 
+exit
 
 #[ -f $dir/discriminative.${model_name}.pkl ] || \
     THEANO_FLAGS=device=gpu1 python -u $TK_DIR/train.py \
