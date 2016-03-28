@@ -109,8 +109,9 @@ if __name__ == "__main__":
         load(P)
         def epoch_callback(epoch):
             logging.info("Epoch %d validation."%epoch)
-            validation_fn()
-        epoch_callback(0)
+            report = validation_fn()
+            logging.info(report)
+            return False
         epoch_train_loop.loop(
                 get_data_stream=lambda:data_io.async(
                     chunk.stream(frame_data.training_stream()),
@@ -119,5 +120,3 @@ if __name__ == "__main__":
                 item_action=train_fn,
                 epoch_callback=epoch_callback
             )
-
-#    P.save(config.args.output_file)

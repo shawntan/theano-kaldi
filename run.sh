@@ -76,7 +76,7 @@ discriminative_structure="1353:1024:1024:1024:1024:1024:1024:$num_pdfs"
 model_name=nosplice
 # Look at using log-normal distribution for the distribution of x
 
-#[ -f $dir/pretrain.${model_name}.pkl ] || \
+[ -f $dir/pretrain.${model_name}.pkl ] || \
     THEANO_FLAGS=device=gpu1 python -u $TK_DIR/pretrain_sda.py \
         --training-frame-files      ${frame_files[@]:2} \
         --validation-frame-files    ${frame_files[@]:0:2} \
@@ -85,26 +85,21 @@ model_name=nosplice
         --improvement-threshold 0.99 \
         --output-file $dir/pretrain.${model_name}.pkl
 
-exit
 
 #[ -f $dir/discriminative.${model_name}.pkl ] || \
     THEANO_FLAGS=device=gpu1 python -u $TK_DIR/train.py \
-    --X-files                 ${frame_files[@]:1}    \
-    --Y-files                 ${label_files[@]:1}    \
-    --validation-frames-files ${frame_files[@]:0:1}  \
-    --validation-labels-files ${label_files[@]:0:1}  \
-    --structure               $discriminative_structure \
-    --temporary-file          $dir/discriminative.${model_name}.pkl.tmp \
-    --output-file             $dir/discriminative.${model_name}.pkl \
-    --learning-file           $dir/discriminative.${model_name}.learning\
-    --pretrain-file           $dir/pretrain.${model_name}.pkl \
-    --minibatch 128 --max-epochs 200  \
-    --learning-rate "0.08" \
-    --learning-rate-decay "0.5" \
-    --learning-rate-minimum "1e-6" \
-    --improvement-threshold "0.99" \
-    --log - #$dir/_log/train_${model_name}.log
-
+        --structure $discriminative_structure \
+        --training-frame-files ${frame_files[@]:1} \
+        --training-label-files ${label_files[@]:1} \
+        --validation-frame-files ${frame_files[@]:0:1} \
+        --validation-label-files ${label_files[@]:0:1} \
+        --max-epochs 20 \
+        --batch-size 256 \
+        --improvement-threshold 0.99 \
+        --learning-file  $dir/discriminative.${model_name}.learning \
+        --temporary-file $dir/discriminative.${model_name}.tmp \
+        --log -
+exit 
 for set in dev test
 do
     python_posteriors="THEANO_FLAGS=device=gpu0 \

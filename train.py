@@ -13,7 +13,12 @@ from itertools import izip, chain
 from theano_toolkit import updates
 from theano_toolkit.parameters import Parameters
 
+import config
+import chunk
+import frame_label_data
+import validator
 import model
+import epoch_train_loop
 
 def count_frames(frames_files):
     split_streams = [ data_io.stream(f) for f in frames_files ]
@@ -27,59 +32,71 @@ def crossentropy(output,Y):
         return - x[T.arange(x.shape[0]),Y] + sum_x
     else:
         return T.nnet.categorical_crossentropy(outputs,Y)
+
+learning_file = config.option("learning_file","Parameters used during updates (e.g. momentum..).")
+temporary_file = config.option("temporary_file","File to save temporary parameters while training.")
+
+@learning_file
+@temporary_file
+def save_state(P,update_vars,temporary_file,learning_file):
+    logging.info("Saving model and state.")
+    P.save(temporary_file)
+    update_vars.save(learning_file)
+
+@learning_file
+@temporary_file
+def load_state(P,update_vars,learning_file,temporary_file):
+    logging.info("Loading previous model and state.")
+    P.load(temporary_file)
+    update_vars.load(learning_file)
 if __name__ == "__main__":
-    logging.debug("Created shared variables")
-
-
+    config.parse_args()
+    
     P = Parameters()
-    classify = model.build(P,input_size,layer_sizes,output_size)
-    outputs = classify(X)
+    predict = model.build(P)
 
-
-    P.load(config.args.pretrain_file)
+    X = T.matrix('X')
+    Y = T.ivector('Y')
+    _,outputs = predict(X)
+    cross_entropy = T.mean(crossentropy(outputs,Y))
+    loss = cross_entropy 
 
     parameters = P.values() 
+    gradients = T.grad(loss,wrt=parameters)
     logging.info("Parameters to tune:" + ','.join(w.name for w in parameters))
 
-    cross_entropy = T.mean(crossentropy(outputs,Y))
-    loss = cross_entropy #+ (0.5/training_frame_count)  * sum(T.sum(T.sqr(w)) for w in parameters)
-    logging.debug("Built model expression.")
-
-    logging.debug("Compiling functions...")
     update_vars = Parameters()
-    gradients = T.grad(loss,wrt=parameters)
-
-
-    monitored_values = {
-            "cross_entropy": loss,
-            "classification_error":T.mean(T.neq(T.argmax(outputs,axis=1),Y))
-        }
-
-    monitored_keys = monitored_values.keys()
-    test = theano.function(
-            inputs = [X,Y],
-            outputs = [ monitored_values[k] for k in monitored_keys ]
+    logging.debug("Compiling functions...")    
+    chunk_trainer = chunk.build_trainer(
+            inputs=[X,Y],
+            updates = updates.momentum(parameters,gradients,P=update_vars)
         )
 
+    validate = validator.build(
+            inputs=[X,Y],
+            outputs={
+                "cross_entropy": loss,
+                "classification_error":T.mean(T.neq(T.argmax(outputs,axis=1),Y))
+            },
+            monitored_var="cross_entropy",
+            validation_stream=frame_label_data.validation_stream,
+            best_score_callback=lambda:save_state(P,update_vars),
+            no_improvement_callback=lambda:load_state(P,update_vars),
+        )
     logging.debug("Done.")
 
-    run_train = compile_train_epoch(
-            parameters,gradients,update_vars,
-            data_stream=build_data_stream(context=5)
+    def epoch_callback(epoch):
+        logging.info("Epoch %d validation."%epoch)
+        report = validate()
+        logging.info(report)
+        return False
+
+    save_state(P,update_vars)
+    epoch_train_loop.loop(
+            get_data_stream=lambda:data_io.async(
+                    chunk.stream(frame_label_data.training_stream()),
+                    queue_size=2
+                ),
+            item_action=chunk_trainer,
+            epoch_callback=epoch_callback
         )
-    def run_test():
-        total_errors = None
-        total_frames = 0
-
-        split_streams = make_split_stream(config.args.validation_frames_files,
-                                            config.args.validation_labels_files) 
-        for f,l in chain(*split_streams):
-            if total_errors is None:
-                total_errors = np.array(test(f,l),dtype=np.float32)
-            else:
-                total_errors += [f.shape[0] * v for v in test(f,l)]
-            total_frames += f.shape[0]
-        values = total_errors/total_frames
-        return { k:float(v) for k,v in zip(monitored_keys,values) }
-
-    train_loop(logging,run_test,run_train,P,update_vars,monitor_score="cross_entropy")

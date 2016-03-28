@@ -29,7 +29,6 @@ def build(inputs,outputs,monitored_var,validation_stream,
 
             report = { output_keys[i]: total[i] / float(total_instances)
                         for i in xrange(len(output_keys)) }
-            logging.info(report)
             score = report[monitored_var]
             
             if self.best_score == best_score_init or \
@@ -41,4 +40,6 @@ def build(inputs,outputs,monitored_var,validation_stream,
             if score < self.best_score:
                 self.best_score = score
                 best_score_callback()
+
+            return report
     return Validator()
