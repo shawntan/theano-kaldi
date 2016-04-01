@@ -10,7 +10,9 @@ from theano_toolkit.parameters import Parameters
 
 @config.option("structure","Structure of the descriminative model.",
                 type=config.structure)
-def build(P,structure,training=True):
+@config.option("weights_file","Loading weights for the model.",
+                type=config.file,default="")
+def build(P,structure,weights_file,training=True):
     input_size  = structure[0]
     layer_sizes = structure[1:-1]
     output_size = structure[-1]
@@ -23,5 +25,7 @@ def build(P,structure,training=True):
     def predict(X):
         hiddens, outputs = classifier([X])
         return hiddens, outputs
+    if weights_file != "":
+        P.load(weights_file)
     return predict
 

@@ -16,4 +16,14 @@ def parse(stream):
             name = line.strip().split()[0]
             yield name,parse_matrix(stream)
 
-
+def print_ark(name,array):
+    print name,"["
+    for i,row in enumerate(array):
+        print " ",
+        for cell in row:
+            print "%0.6f"%cell,
+        if i == array.shape[0]-1:
+            print "]"
+        else:
+            print
+ 

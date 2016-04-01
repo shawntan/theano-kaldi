@@ -20,22 +20,8 @@ import validator
 import model
 import epoch_train_loop
 
-def count_frames(frames_files):
-    split_streams = [ data_io.stream(f) for f in frames_files ]
-    return sum(f.shape[0] for f in chain(*split_streams))
-
-def crossentropy(output,Y):
-    if output.owner.op == T.nnet.softmax_op:
-        x = output.owner.inputs[0]
-        k = T.max(x,axis=1,keepdims=True)
-        sum_x = T.log(T.sum(T.exp(x - k),axis=1)) + k
-        return - x[T.arange(x.shape[0]),Y] + sum_x
-    else:
-        return T.nnet.categorical_crossentropy(outputs,Y)
-
 learning_file = config.option("learning_file","Parameters used during updates (e.g. momentum..).")
 temporary_file = config.option("temporary_file","File to save temporary parameters while training.")
-
 @learning_file
 @temporary_file
 def save_state(P,update_vars,temporary_file,learning_file):
@@ -49,6 +35,66 @@ def load_state(P,update_vars,learning_file,temporary_file):
     logging.info("Loading previous model and state.")
     P.load(temporary_file)
     update_vars.load(learning_file)
+
+@config.option("output_file","Final file to save parameters after training.")
+def final_save(P,output_file):
+    P.save(output_file)
+
+
+@config.option("initial_learning_rate","Learning rate for gradient step.",type=config.float)
+@config.option("momentum","Momentum to use for gradient step.",type=config.float)
+def build_updates(parameters,gradients,update_vars,initial_learning_rate,momentum):
+    update_vars._learning_rate = initial_learning_rate
+    return updates.momentum(parameters,gradients,P=P,
+                            learning_rate=update_vars._learning_rate,
+                            mu=momentum)
+
+@config.option("learning_rate_decay", "Factor to multiply when no improvement.",
+                                    default=0.5,type=config.float)
+@config.option("improvement_threshold", "Improvement threshold",
+                default=0.99,type=config.float)
+def build_validation_callback(P,update_vars,learning_rate_decay,improvement_threshold):
+    def validation_callback(prev_score,curr_score):
+        if curr_score < prev_score:
+            save_state(P,update_vars)
+
+        if curr_score > prev_score * improvement_threshold:
+            load_state(P,update_vars)
+            current_learning_rate = update_vars._learning_rate.get_value()
+            logging.info("Decaying learning rate: %0.5f -> %0.5f"%(current_learning_rate,
+                            current_learning_rate * learning_rate_decay))
+            update_vars._learning_rate.set_value(
+                            current_learning_rate * learning_rate_decay)
+
+    return validation_callback
+
+@config.option("minimum_learning_rate", "Decay until this number.",
+                default=1e-6,type=config.float)
+def build_epoch_callback(minimum_learning_rate):
+    def epoch_callback(epoch):
+        logging.info("Epoch %d validation."%epoch)
+        report = validate()
+        logging.info(report)
+        current_learning_rate = update_vars._learning_rate.get_value()
+        return current_learning_rate < minimum_learning_rate
+    return epoch_callback
+
+
+def count_frames(frames_files):
+    split_streams = [ data_io.stream(f) for f in frames_files ]
+    return sum(f.shape[0] for f in chain(*split_streams))
+
+def crossentropy(output,Y):
+    if output.owner.op == T.nnet.softmax_op:
+        x = output.owner.inputs[0]
+        k = T.max(x,axis=1,keepdims=True)
+        sum_x = T.log(T.sum(T.exp(x - k),axis=1)) + k
+        return - x[T.arange(x.shape[0]),Y] + sum_x
+    else:
+        return T.nnet.categorical_crossentropy(outputs,Y)
+
+
+
 if __name__ == "__main__":
     config.parse_args()
     
@@ -63,13 +109,13 @@ if __name__ == "__main__":
 
     parameters = P.values() 
     gradients = T.grad(loss,wrt=parameters)
-    logging.info("Parameters to tune:" + ','.join(w.name for w in parameters))
+    logging.info("Parameters to tune:" + ', '.join(sorted(w.name for w in parameters)))
 
     update_vars = Parameters()
     logging.debug("Compiling functions...")    
     chunk_trainer = chunk.build_trainer(
             inputs=[X,Y],
-            updates = updates.momentum(parameters,gradients,P=update_vars)
+            updates = build_updates(parameters,gradients,update_vars)
         )
 
     validate = validator.build(
@@ -80,23 +126,17 @@ if __name__ == "__main__":
             },
             monitored_var="cross_entropy",
             validation_stream=frame_label_data.validation_stream,
-            best_score_callback=lambda:save_state(P,update_vars),
-            no_improvement_callback=lambda:load_state(P,update_vars),
+            callback=build_validation_callback(P,update_vars),
         )
     logging.debug("Done.")
 
-    def epoch_callback(epoch):
-        logging.info("Epoch %d validation."%epoch)
-        report = validate()
-        logging.info(report)
-        return False
 
-    save_state(P,update_vars)
     epoch_train_loop.loop(
             get_data_stream=lambda:data_io.async(
                     chunk.stream(frame_label_data.training_stream()),
-                    queue_size=2
+                    queue_size=5
                 ),
             item_action=chunk_trainer,
-            epoch_callback=epoch_callback
+            epoch_callback=build_epoch_callback()
         )
+    final_save(P)

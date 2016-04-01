@@ -86,27 +86,31 @@ model_name=nosplice
         --output-file $dir/pretrain.${model_name}.pkl
 
 
-#[ -f $dir/discriminative.${model_name}.pkl ] || \
+[ -f $dir/discriminative.${model_name}.pkl ] || \
     THEANO_FLAGS=device=gpu1 python -u $TK_DIR/train.py \
         --structure $discriminative_structure \
         --training-frame-files ${frame_files[@]:1} \
         --training-label-files ${label_files[@]:1} \
         --validation-frame-files ${frame_files[@]:0:1} \
         --validation-label-files ${label_files[@]:0:1} \
-        --max-epochs 20 \
+        --max-epochs 40 \
         --batch-size 256 \
         --improvement-threshold 0.99 \
+        --weights-file   $dir/pretrain.${model_name}.pkl \
         --learning-file  $dir/discriminative.${model_name}.learning \
         --temporary-file $dir/discriminative.${model_name}.tmp \
+        --output-file    $dir/discriminative.${model_name}.pkl \
+        --initial-learning-rate  0.08 \
+        --momentum 0.9 \
         --log -
-exit 
+
 for set in dev test
 do
     python_posteriors="THEANO_FLAGS=device=gpu0 \
         python $TK_DIR/nnet_forward.py \
-        --structure    $discriminative_structure \
-        --model        $dir/discriminative.${model_name}.pkl \
-        --class-counts '$dir/decode_${set}_${model_name}/class.counts'"
+        --structure         $discriminative_structure \
+        --weights-file      $dir/discriminative.${model_name}.pkl \
+        --class-counts-file $dir/decode_${set}_${model_name}/class.counts"
 
     feats="copy-feats scp:$dir/data/$set/feats.scp ark:- \
         | $feat_transform \

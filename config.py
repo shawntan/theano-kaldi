@@ -14,7 +14,9 @@ float = float
 
 def file(filename):
     import os.path
-    assert(os.path.isfile(filename))
+    if filename != "":
+        print >> sys.stderr, filename
+        assert(os.path.isfile(filename))
     return filename
 
 def structure(str_struct):
