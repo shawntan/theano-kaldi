@@ -45,6 +45,10 @@ def load(P,output_file):
     logging.info("Loading model.")
     P.load(output_file)
 
+def build_validation_callback(P):
+    def validation_callback(prev_score,curr_score):
+        if curr_score < prev_score: save(P)
+    return validation_callback
 
 if __name__ == "__main__":
     config.parse_args()
@@ -93,13 +97,15 @@ if __name__ == "__main__":
                 mapping=shared_variables_mapping
             )
         )
+        
+
         validation_fns.append(
             validator.build(
                 inputs=[X],
                 outputs={"loss":loss},
                 monitored_var="loss",
                 validation_stream=frame_data.validation_stream,
-                best_score_callback=lambda:save(P)
+                callback=build_validation_callback(P)
             )
         )
         logging.info("Done compiling for layer %s"%layer)

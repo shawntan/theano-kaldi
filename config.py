@@ -15,7 +15,8 @@ float = float
 def file(filename):
     import os.path
     if filename != "":
-        print >> sys.stderr, filename
+        if not os.path.isfile(filename):
+            print >> sys.stderr, "%s does not exist."%filename
         assert(os.path.isfile(filename))
     return filename
 

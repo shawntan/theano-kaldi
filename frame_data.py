@@ -20,6 +20,7 @@ def create_split_streams(frame_files,left_context,right_context):
                 type=config.file,nargs='+')
 def training_stream(training_frame_files):
     split_streams = create_split_streams(training_frame_files)
+    split_streams = [ data_io.buffered_random(s) for s in split_streams ]
     split_streams = [ data_io.chop(s) for s in split_streams ]
     stream = data_io.random_select_stream(*split_streams)
     stream = data_io.buffered_random(stream)

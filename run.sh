@@ -76,26 +76,25 @@ discriminative_structure="1353:1024:1024:1024:1024:1024:1024:$num_pdfs"
 model_name=nosplice
 # Look at using log-normal distribution for the distribution of x
 
-[ -f $dir/pretrain.${model_name}.pkl ] || \
-    THEANO_FLAGS=device=gpu1 python -u $TK_DIR/pretrain_sda.py \
+#[ -f $dir/pretrain.${model_name}.pkl ] || \
+    THEANO_FLAGS=device=gpu0 python -u $TK_DIR/pretrain_sda.py \
         --training-frame-files      ${frame_files[@]:2} \
         --validation-frame-files    ${frame_files[@]:0:2} \
         --structure                 $discriminative_structure \
-        --batch-size 256 --max-epochs 1 \
-        --improvement-threshold 0.99 \
+        --batch-size 128 --max-epochs 5 \
         --output-file $dir/pretrain.${model_name}.pkl
 
 
-[ -f $dir/discriminative.${model_name}.pkl ] || \
-    THEANO_FLAGS=device=gpu1 python -u $TK_DIR/train.py \
+#[ -f $dir/discriminative.${model_name}.pkl ] || \
+    THEANO_FLAGS=device=gpu0 python -u $TK_DIR/train.py \
         --structure $discriminative_structure \
         --training-frame-files ${frame_files[@]:1} \
         --training-label-files ${label_files[@]:1} \
         --validation-frame-files ${frame_files[@]:0:1} \
         --validation-label-files ${label_files[@]:0:1} \
-        --max-epochs 40 \
-        --batch-size 256 \
-        --improvement-threshold 0.99 \
+        --max-epochs 50 \
+        --batch-size 128 \
+        --improvement-threshold 0.995 \
         --weights-file   $dir/pretrain.${model_name}.pkl \
         --learning-file  $dir/discriminative.${model_name}.learning \
         --temporary-file $dir/discriminative.${model_name}.tmp \
