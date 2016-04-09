@@ -45,7 +45,7 @@ done
 # Reading -> Transforming -> Writing to pickle
 feat_transform="\
 add-deltas --delta-order=$(cat $dir/delta_order) ark:- ark:- |\
-nnet-forward $dir/feature_transform ark:- ark,t:- \
+nnet-forward $dir/feature_transform ark:- ark:- \
 "
 
 [ -f $dir/pkl/train.00.pklgz ] ||\
@@ -76,7 +76,7 @@ discriminative_structure="1353:1024:1024:1024:1024:1024:1024:$num_pdfs"
 model_name=nosplice
 # Look at using log-normal distribution for the distribution of x
 
-#[ -f $dir/pretrain.${model_name}.pkl ] || \
+[ -f $dir/pretrain.${model_name}.pkl ] || \
     THEANO_FLAGS=device=gpu0 python -u $TK_DIR/pretrain_sda.py \
         --training-frame-files      ${frame_files[@]:2} \
         --validation-frame-files    ${frame_files[@]:0:2} \
@@ -94,7 +94,7 @@ model_name=nosplice
         --validation-label-files ${label_files[@]:0:1} \
         --max-epochs 50 \
         --batch-size 128 \
-        --improvement-threshold 0.995 \
+        --improvement-threshold 0.999 \
         --weights-file   $dir/pretrain.${model_name}.pkl \
         --learning-file  $dir/discriminative.${model_name}.learning \
         --temporary-file $dir/discriminative.${model_name}.tmp \
@@ -115,8 +115,9 @@ do
         | $feat_transform \
         | $python_posteriors"
 
-    $TK_DIR/decode_dnn.sh --nj 1 \
-        --scoring-opts "--min-lmwt 1 --max-lmwt 8" \
+    $TK_DIR/decode_dnn.sh \
+        --nj 1 \
+        --beam 15.0 \
         --norm-vars true \
         $gmmdir/graph $dir/data/${set}\
         ${gmmdir}_ali $dir/decode_${set}_${model_name}\

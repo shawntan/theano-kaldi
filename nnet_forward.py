@@ -16,6 +16,17 @@ def load_counts(class_counts_file):
         counts = np.array([ np.float32(v) for v in row.split() ])
     return counts
 
+def log_softmax(output):
+    if output.owner.op == T.nnet.softmax_op:
+        x = output.owner.inputs[0]
+        k = T.max(x,axis=1,keepdims=True)
+        sum_x = T.log(T.sum(T.exp(x - k),axis=1,keepdims=True)) + k
+        print >> sys.stderr, "Stable log softmax"
+        return x - sum_x
+    else:
+        return T.log(softmax)
+
+
 if __name__ == "__main__":
     config.parse_args()
     
@@ -26,12 +37,12 @@ if __name__ == "__main__":
     counts = load_counts()
     predict = theano.function(
             inputs = [X],
-            outputs = T.log(outputs) - T.log(counts/T.sum(counts))
+            outputs = log_softmax(outputs) - T.log(counts/T.sum(counts))
         )
     
 
     if predict != None:
-        stream = data_io.context(ark_io.parse(sys.stdin),left=5,right=5)
+        stream = data_io.context(ark_io.parse_binary(sys.stdin),left=5,right=5)
         for name,frames in stream:
-            ark_io.print_ark(name,predict(frames))
+            ark_io.print_ark_binary(sys.stdout,name,predict(frames))
 

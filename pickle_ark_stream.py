@@ -9,7 +9,7 @@ import cPickle as pickle
 import ark_io
 
 def ark_stream():
-    return ark_io.parse(sys.stdin)
+    return ark_io.parse_binary(sys.stdin)
 
 if __name__ == "__main__":
     output_file = sys.argv[1]

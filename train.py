@@ -55,12 +55,12 @@ def build_updates(parameters,gradients,update_vars,initial_learning_rate,momentu
                 default=0.99,type=config.float)
 def build_validation_callback(P,update_vars,learning_rate_decay,improvement_threshold):
     def validation_callback(prev_score,curr_score):
+        current_learning_rate = update_vars._learning_rate.get_value()
         if curr_score < prev_score:
             save_state(P,update_vars)
 
         if curr_score > prev_score * improvement_threshold:
             load_state(P,update_vars)
-            current_learning_rate = update_vars._learning_rate.get_value()
             logging.info("Decaying learning rate: %0.5f -> %0.5f"%(current_learning_rate,
                             current_learning_rate * learning_rate_decay))
             update_vars._learning_rate.set_value(
@@ -97,7 +97,8 @@ def crossentropy(output,Y):
 
 if __name__ == "__main__":
     config.parse_args()
-    
+    total_frames = sum(x.shape[0] for x,_ in frame_label_data.training_stream())
+    logging.info("Total frames: %d"%total_frames)
     P = Parameters()
     predict = model.build(P)
 
@@ -105,9 +106,10 @@ if __name__ == "__main__":
     Y = T.ivector('Y')
     _,outputs = predict(X)
     cross_entropy = T.mean(crossentropy(outputs,Y))
-    loss = cross_entropy 
-
     parameters = P.values() 
+    loss = cross_entropy + \
+            (0.5/total_frames) * sum(T.sum(T.sqr(w)) for w in parameters)
+
     gradients = T.grad(loss,wrt=parameters)
     logging.info("Parameters to tune:" + ', '.join(sorted(w.name for w in parameters)))
 
@@ -121,7 +123,7 @@ if __name__ == "__main__":
     validate = validator.build(
             inputs=[X,Y],
             outputs={
-                "cross_entropy": loss,
+                "cross_entropy": cross_entropy,
                 "classification_error":T.mean(T.neq(T.argmax(outputs,axis=1),Y))
             },
             monitored_var="cross_entropy",
