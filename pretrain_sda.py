@@ -111,7 +111,8 @@ if __name__ == "__main__":
         logging.info("Done compiling for layer %s"%layer)
 
     save(P)
-    for train_fn,validation_fn in zip(train_fns,validation_fns):
+    for i,(train_fn,validation_fn) in enumerate(zip(train_fns,validation_fns)):
+        logging.info("Starting pre-training for epoch %d"%i)
         load(P)
         def epoch_callback(epoch):
             logging.info("Epoch %d validation."%epoch)

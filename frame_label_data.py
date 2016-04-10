@@ -22,11 +22,13 @@ def create_split_streams(frame_files,label_files,left_context,right_context):
 @config.option("training_label_files","Files for training labels.",
                 type=config.file,nargs='+')
 def training_stream(training_frame_files,training_label_files):
-    split_streams = create_split_streams(training_frame_files,training_label_files)
-    split_streams = [ data_io.buffered_random(s) for s in split_streams ]
+    split_streams = create_split_streams(training_frame_files,
+                                         training_label_files)
+    split_streams = [ data_io.buffered_random(s,buffer_items=200) 
+                        for s in split_streams ]
     split_streams = [ data_io.chop(s) for s in split_streams ]
     stream = data_io.random_select_stream(*split_streams)
-    stream = data_io.buffered_random(stream)
+    stream = data_io.buffered_random(stream,buffer_items=200)
     return stream
 
 @config.option("validation_frame_files","Files for validation frames.",
