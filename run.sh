@@ -85,7 +85,7 @@ model_name=nosplice
         --output-file $dir/pretrain.${model_name}.pkl
 
 
-#[ -f $dir/discriminative.${model_name}.pkl ] || \
+[ -f $dir/discriminative.${model_name}.pkl ] || \
     THEANO_FLAGS=device=gpu0 python -u $TK_DIR/train.py \
         --structure $discriminative_structure \
         --training-frame-files ${frame_files[@]:1} \
