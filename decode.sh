@@ -15,8 +15,8 @@ nj=4
 cmd=run.pl
 
 acwt=0.10 # note: only really affects pruning (scoring is on lattices).
-beam=13.0
-lattice_beam=8.0
+beam=18.0
+lattice_beam=10.0
 min_active=200
 max_active=7000 # limit of active tokens
 max_mem=50000000 # approx. limit to memory consumption during minimization in bytes
@@ -25,7 +25,7 @@ nnet_forward_opts="--no-softmax=true --prior-scale=1.0"
 skip_scoring=false
 scoring_opts="--min-lmwt 4 --max-lmwt 15"
 
-num_threads=1 # if >1, will use latgen-faster-parallel
+num_threads=10 # if >1, will use latgen-faster-parallel
 parallel_opts=   # Ignored now.
 use_gpu="no" # yes|no|optionaly
 # End configuration section.

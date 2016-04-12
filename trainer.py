@@ -113,7 +113,20 @@ def build_train_loop():
             run_train(learning_rate)
             logging.info("Epoch %d training done."%(epoch + 1))
 
+        scores = run_test()
+        score = scores[monitor_score]
+        logging.info("Epoch " + str(epoch) + " results: " + json.dumps(scores))
+        _best_score = best_score
+
+        if score < _best_score:
+            logging.debug("score < best_score, saving model.")
+            best_score = score
+            P.save(temporary_model_file)
+            update_vars.save(update_parameters_file)
+
         P.load(temporary_model_file)
         P.save(output_file)
         logging.debug("Done training process.")
+
+
     return train_loop

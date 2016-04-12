@@ -15,6 +15,7 @@ def build_speaker_inferer(P,method="average",
         x_size=440,
         speaker_latent_size=32,
         speaker_layer_sizes=[1024,1024]):
+
     if method == "average":
         frame_speaker_encode = vae.build_inferer(P,
                 name="speaker_encoder", 
@@ -43,32 +44,51 @@ def build_speaker_inferer(P,method="average",
             initial_weights=feedforward.relu_init,
             activation=T.nnet.softplus,
         )
+
         P.W_speaker_encoder_pool = feedforward.relu_init(
                 speaker_layer_sizes[0],
                 speaker_layer_sizes[0]
             )
-        output = vae.build_inferer(P,
-                name="speaker_encoder_pooled", 
-                input_sizes=[speaker_layer_sizes[0]],
-                hidden_sizes=[speaker_layer_sizes[1]],
-                output_size=speaker_latent_size,
-                initial_weights=feedforward.relu_init,
-                activation=T.nnet.softplus,
-                initialise_outputs=True
-            )
 
-        def speaker_encode(X):
-            hidden_1 = input_transform(X)
-            pooled = T.max(T.dot(hidden_1,P.W_speaker_encoder_pool),axis=1)
-            return output([pooled]) 
+
+        if method == "max":
+            output = vae.build_inferer(P,
+                    name="speaker_encoder_pooled", 
+                    input_sizes=[speaker_layer_sizes[0]],
+                    hidden_sizes=[speaker_layer_sizes[1]],
+                    output_size=speaker_latent_size,
+                    initial_weights=feedforward.relu_init,
+                    activation=T.nnet.softplus,
+                    initialise_outputs=True
+                )
+
+            def speaker_encode(X):
+                hidden_1 = input_transform(X)
+                pooled = T.max(T.dot(hidden_1,P.W_speaker_encoder_pool),axis=1)
+                return output([pooled])
+
+        elif method == "attention":
+            P.w_attention = np.zeros((speaker_layer_sizes[0],),dtype=np.float32)
+            output = vae.build_inferer(P,
+                    name="speaker_encoder_pooled", 
+                    input_sizes=[speaker_layer_sizes[0]],
+                    hidden_sizes=[speaker_layer_sizes[1]],
+                    output_size=speaker_latent_size,
+                    initial_weights=feedforward.relu_init,
+                    activation=T.nnet.softplus,
+                    initialise_outputs=True
+                )
+
+            def speaker_encode(X):
+                hidden_1 = input_transform(X)
+                attention = T.nnet.softmax(T.dot(hidden_1,P.w_attention))
+                pooled = T.sum(T.dot(hidden_1,P.W_speaker_encoder_pool) *\
+                                    attention.dimshuffle(0,1,'x'), axis=1)
+
+                return output([pooled])
+
              
-
-
-
     return speaker_encode 
-
-
-
 
 
 def build_encoder(
@@ -105,11 +125,11 @@ def build(P,
         acoustic_latent_size=64,
         speaker_latent_size=32,
         speaker_layer_sizes=[1024,1024],
-        acoustic_layer_sizes=[1024,1024],
-        decoder_layer_sizes=[2048,2048],
+        acoustic_layer_sizes=[1024,1024,1024],
+        decoder_layer_sizes=[1024,1024,1024],
         speaker_count=83):
 
-    P.speaker_vector = 0. * np.random.randn(speaker_count,speaker_latent_size).astype(np.float32)
+    P.speaker_vector = 0.01 * np.random.randn(speaker_count,speaker_latent_size).astype(np.float32)
     speaker_encode, acoustic_encode = build_encoder(
             P, pooling_method, x_size,
             acoustic_latent_size,
@@ -137,6 +157,7 @@ def build(P,
         utterance_speaker,\
                 utterance_speaker_mean,\
                 utterance_speaker_std = speaker_encode(X)
+
         utterance_speaker = utterance_speaker.dimshuffle(0,'x',1)
         acoustic, acoustic_mean, acoustic_std = acoustic_encode([X,utterance_speaker])
 
@@ -184,6 +205,4 @@ def build(P,
                 batch_acoustic_latent_cost,\
                 batch_reconstruction_cost
 
-
     return unsupervised_training_cost,supervised_training_cost
-

@@ -12,6 +12,7 @@ if __name__ == "__main__":
     config.structure("structure","Structure of discriminative model.")
     config.file("pretrain_file","Pretrain file.",default="")
     config.file("vae_model","Pretrain file.",default="")
+    config.real("momentum","Momentum.",default=0.9)
 
     X = T.matrix('X')
     Y = T.ivector('Y')
@@ -84,6 +85,7 @@ def build_data_stream(context=5):
                             for s in split_streams ]
         stream = data_io.random_select_stream(*split_streams)
         stream = data_io.buffered_random(stream)
+        stream = data_io.async(stream)
         stream = data_io.randomise(stream)
         return stream
     return data_stream
@@ -146,8 +148,8 @@ if __name__ == "__main__":
     logging.info("Parameters to tune:" + ','.join(w.name for w in parameters))
 
 
-    loss = cross_entropy + \
-            (0.5/training_frame_count) * sum(T.sum(T.sqr(w)) for w in parameters)
+    loss = (cross_entropy + \
+            (0.5/training_frame_count) * sum(T.sum(T.sqr(w)) for w in parameters))
     logging.debug("Built model expression.")
 
     logging.debug("Compiling functions...")
@@ -159,8 +161,10 @@ if __name__ == "__main__":
     def strat(parameters, gradients, learning_rate=1e-3, P=None):
 #        return [ (p, p - learning_rate * g) 
 #                    for p,g in zip(parameters,gradients) ]
-        return updates.momentum(parameters,gradients,
-                learning_rate=learning_rate,
+        return updates.momentum(
+                parameters,gradients,
+                mu=config.args.momentum,
+                learning_rate=learning_rate/T.cast(X.shape[0],'float32'),
                 P=P
             )
 
@@ -173,7 +177,7 @@ if __name__ == "__main__":
 
     def run_test():
         values = 0
-        for i in xrange(10):
+        for i in xrange(1):
             total_errors = None
             total_frames = 0
             split_streams = make_split_stream(config.args.validation_frames_files,
@@ -185,7 +189,8 @@ if __name__ == "__main__":
                     total_errors += [f.shape[0] * v for v in test(f,l)]
                 total_frames += f.shape[0]
             values = values + total_errors/total_frames
-        return { k:float(v) for k,v in zip(monitored_keys,values/10) }
+        return { k:float(v) for k,v in zip(monitored_keys,values) }
 
+    P.W_classifier_output.set_value(0 * P.W_classifier_output.get_value())
     P.b_classifier_output.set_value(np.log(training_label_count))
     train_loop(logging,run_test,run_train,P,update_vars,monitor_score="cross_entropy")

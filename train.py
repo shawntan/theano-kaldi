@@ -111,7 +111,7 @@ if __name__ == "__main__":
     logging.info("Parameters to tune:" + ','.join(w.name for w in parameters))
 
 
-    loss = cross_entropy #+ (0.5/training_frame_count)  * sum(T.sum(T.sqr(w)) for w in parameters)
+    loss = X.shape[0] * cross_entropy #+ (0.5/training_frame_count)  * sum(T.sum(T.sqr(w)) for w in parameters)
     logging.debug("Built model expression.")
 
     logging.debug("Compiling functions...")

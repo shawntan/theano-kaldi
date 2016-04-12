@@ -19,34 +19,6 @@ from theano_toolkit.parameters import Parameters
 def ark_stream():
     return ark_io.parse(sys.stdin)
 
-def posterior_stream(predict,input_stream,buffer_size=2**16):
-    frame_buffer = None
-    frame_names = []
-    frame_intervals = [0]
-
-    def yield_buffer():
-        posteriors = predict(frame_buffer)
-        for name,start,end in zip(frame_names,frame_intervals[:-1],frame_intervals[1:]):
-            print >> sys.stderr, (name,start,end)
-            yield name,posteriors[start:end]
-        frame_intervals[:] = [0]
-
-    for name,frames in input_stream:
-        s = frame_intervals[-1]
-        if frame_buffer is None:
-            frame_buffer = np.empty((buffer_size,frames.shape[1]),dtype=np.float32)
-
-        if s + frames.shape[0] > buffer_size:
-            for x in yield_buffer(): yield x
-            s = 0
-
-        frame_buffer[s:s + frames.shape[0]] = frames
-        frame_intervals.append(s + frames.shape[0])
-        frame_names.append(name)
-
-    for x in yield_buffer(): yield x
-
-
 def print_ark(name,array):
     print name,"["
     for i,row in enumerate(array):
@@ -92,10 +64,6 @@ if __name__ == "__main__":
 
     if predict != None:
         stream = data_io.context(ark_stream(),left=5,right=5)
-        for name, frames in stream:
+        for name, frames in data_io.async(stream):
             print_ark(name, predict(encoder(frames)))
-
-        #stream = posterior_stream(predict,stream)
-        #for name,posteriors in stream:
-        #    print_ark(name,posteriors)
 

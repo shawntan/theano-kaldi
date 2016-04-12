@@ -28,6 +28,7 @@ total_lines=$(wc -l <${spk2utt_file})
 cat $data_dir/spk2utt | cut -d' ' -f1 | shuf --random-source=$log_dir/rand | split -d --lines=${lines_per_file} - "$tmp_dir/spkrs."
 
 ls $tmp_dir/spkrs.* | xargs -n 1 -P $num_jobs sh -c '
+
 filename=$1
 echo "Starting job... $filename"
 sed -i.bak "s/^/\^/" $filename
@@ -57,4 +58,3 @@ echo "Done."
 ' fnord
 PYTHONPATH=theano-kaldi/ python -c "import sys;import data_io;[ n for n,_,_ in data_io.stream('${output_prefix}.00.pklgz','${output_prefix}_lbl.00.pklgz',with_name=True)]"
 
-rm -rf $tmp_dir

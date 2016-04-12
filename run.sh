@@ -30,16 +30,20 @@ echo "Copying directories..."
     cp -r $data_dir/test_eval92/      $dir/data/test/
 
 # Initial preprocessing for input features
-echo "Feature transform.."
-[ -f $dir/feature_transform ] || \
-    copy-feats scp:$dir/data/train/feats.scp ark:- \
-    | compute-cmvn-stats ark:- - \
-    | cmvn-to-nnet --binary=false - $dir/feature_transform  || exit 1;
-
 # Reading -> Transforming -> Writing to pickle
 feat_transform="\
 nnet-forward $dir/feature_transform ark:- ark,t:- \
 "
+mkdir pkl_utt_cmvn
+time $TK_DIR/prepare_pickle.sh $num_jobs \
+    $dir/data/train \
+    $ali_dir \
+    $dir//train \
+    $dir/_log/split \
+    "$feat_transform" || exit 1;
+
+
+
 [ -f $dir/pkl/train.00.pklgz ] ||\
 	time $TK_DIR/prepare_pickle.sh $num_jobs \
     $dir/data/train \

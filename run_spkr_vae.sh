@@ -21,10 +21,8 @@ feat_transform=" nnet-forward $dir/feature_transform ark:- ark,t:- "
 input_dim=$(( 11 * `copy-feats scp:$dir/data/train/feats.scp ark:- | eval $feat_transform | feat-to-dim ark:- -` ))
 num_spkrs=$(cat data/train_si84_multi/spk2utt | wc -l)
 
-frame_files=($dir/pkl/train.?*.pklgz)
-label_files=($dir/pkl/train_lbl.?*.pklgz)
+frame_files=($dir/utt_cmvn_pkl/train.?*.pklgz)
 
-model_name='acoustic32speaker32'
 THEANO_FLAGS=device=gpu0 python -u $TK_DIR/train_utterance_speaker.py \
     --frames-files            ${frame_files[@]:2}    \
     --validation-frames-files ${frame_files[@]:0:2}    \
