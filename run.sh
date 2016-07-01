@@ -47,6 +47,13 @@ feat_transform="\
 add-deltas --delta-order=$(cat $dir/delta_order) ark:- ark:- |\
 nnet-forward $dir/feature_transform ark:- ark:- \
 "
+    $TK_DIR/prepare_pickle.sh 20 \
+        $featdir/$dataset \
+        /home/gautam/Work/aurora-sim/lda/train-lda/tri2b_multi_ali_si84 \
+        exp/dnn_lda_tk_feedforward/mfcc_pkl/$prefix \
+        exp/dnn_lda_tk_feedforward/_log/split_mfcc \
+        "copy-feats ark:- ark:-" || exit 1;
+
 
 [ -f $dir/pkl/train.00.pklgz ] ||\
 	time $TK_DIR/prepare_pickle.sh $num_jobs \

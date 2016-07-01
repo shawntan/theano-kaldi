@@ -11,7 +11,6 @@ int = int
 str = str
 float = float
 
-
 def file(filename):
     import os.path
     if filename != "":

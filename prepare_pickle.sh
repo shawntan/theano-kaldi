@@ -5,7 +5,7 @@ TK_DIR=$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )
 # Arguments
 num_jobs=$1
 data_dir=$2
-ali_dir=$(pwd)/$3
+ali_dir=$3
 output_prefix=$4
 log_dir=$5
 feat_transform=$6
@@ -21,37 +21,43 @@ data_ali_file=$tmp_dir/full.ali
 data_feats_file=$tmp_dir/feats.scp
 feats_file=$data_dir/feats.scp
 spk2utt_file=$data_dir/spk2utt
+utt2spk_file=$data_dir/utt2spk
 
 total_lines=$(wc -l <${spk2utt_file})
 ((lines_per_file = (total_lines + num_jobs - 1) / num_jobs))
 cat $data_dir/spk2utt | cut -d' ' -f1 | shuf --random-source=$log_dir/rand | split -d --lines=${lines_per_file} - "$tmp_dir/spkrs."
  
-ls $tmp_dir/spkrs.* | xargs -n 1 -P $num_jobs sh -c '
+ls $tmp_dir/spkrs.* | xargs -n 1 -P $num_jobs /bin/bash -c '
 filename=$1
 echo "Starting job... $filename"
 idx=${filename##*.}
+cat "'$utt2spk_file'" | \
+    grep -Ef <(cat $filename | sed "s/$/\$/g") | \
+    cut -d" " -f1 > $filename.utts
+
 {
 	echo "Starting on split $idx."
 	
 	cat '"$feats_file"' \
-		| grep -F -f $filename \
+        | grep -F -f $filename.utts \
 		| copy-feats scp:- ark:- \
 		| '"$feat_transform"' \
 		| python2 -u "'$TK_DIR'/pickle_ark_stream.py" "'"$output_prefix"'.$idx.pklgz"
 
+
 	gunzip -c $( ls '"$ali_dir"'/ali.*.gz | sort -V ) \
-		| ali-to-pdf "'"$ali_dir"'/final.mdl" ark:- ark,t:- \
-		| grep -F -f $filename \
+		| ali-to-pdf "'"$ali_dir"'/final.mdl" ark:- ark,t:- | sort\
+        | grep -F -f $filename.utts \
 		| python2 "'$TK_DIR'/pickle_ali.py" "'"$output_prefix"'_lbl.$idx.pklgz"
 
 	gunzip -c $( ls '"$ali_dir"'/ali.*.gz | sort -V ) \
 		| ali-to-phones --per-frame "'"$ali_dir"'/final.mdl" ark:- ark,t:- \
-		| grep -F -f $filename \
+		| grep -F -f $filename.utts \
 		| python2 "'$TK_DIR'/pickle_ali.py" "'"$output_prefix"'_phn.$idx.pklgz"
 
 } > "'$log_dir'/split.$idx.log" 2>&1
 echo "Done."
 ' fnord
-PYTHONPATH=theano-kaldi/ python -c "import sys;import data_io;[ n for n,_,_ in data_io.stream('${output_prefix}.00.pklgz','${output_prefix}_lbl.00.pklgz',with_name=True)]"
+PYTHONPATH=$TK_DIR python -c "import sys;import data_io;[ n for n,_,_ in data_io.stream('${output_prefix}.00.pklgz','${output_prefix}_lbl.00.pklgz',with_name=True)]"
 
-rm -rf $tmp_dir
+#rm -rf $tmp_dir

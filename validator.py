@@ -18,20 +18,13 @@ def build(inputs,outputs,monitored_var,validation_stream,
         
         def __call__(self):
             total_instances = 0
-            total = np.zeros((len(output_keys),),dtype=np.float32)
-
-            for x in validation_stream():
-                outputs = test(*x)
-                total_instances += x[0].shape[0]
-                total += [ x[0].shape[0] * y for y in outputs ]
-
-            report = { output_keys[i]: total[i] / float(total_instances)
-                        for i in xrange(len(output_keys)) }
+            total = sum(np.array(test(*x)) for x in validation_stream())
+            report = { output_keys[i]: total[i] 
+                            for i in xrange(len(output_keys)) }
             score = report[monitored_var]
-           
             callback(self.best_score,score)
             if score < self.best_score:
                 self.best_score = score
-
             return report
+
     return Validator()

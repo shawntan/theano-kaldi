@@ -5,21 +5,14 @@ import numpy as np
 from itertools import izip
 import random
 def context(stream,left=5,right=5):
-    left_buf = right_buf = None
-    idxs = np.arange(1000).reshape(1000,1) + np.arange(left + 1 + right)
-    for name,frames in stream:
-        dim = frames.shape[1]
-        if left_buf is None:
-            left_buf = np.zeros((left,dim),dtype=np.float32)
-            right_buf = np.zeros((right,dim),dtype=np.float32)
-        length = frames.shape[0]
-        if length > idxs.shape[0]:
-            idxs = np.arange(length).reshape(length,1) +\
-                    np.arange(left + 1 + right)
-        frames = np.concatenate([left_buf,frames,right_buf])
-        frames = frames[idxs[:length]]
-        frames = frames.reshape(length, (left + 1 + right) * dim)
-        yield name,frames
+    for name, frames in stream:
+        frames_pad = np.lib.pad(frames,((left,right),(0,0)),'constant')
+        windowed_frames = np.lib.stride_tricks.as_strided(
+                frames_pad,strides=frames_pad.strides,
+                shape=(frames.shape[0],
+                        frames.shape[1] * (left + right + 1))
+            )
+        yield name, windowed_frames
 
 def stream_file(filename,open_method=gzip.open):
     with open_method(filename,'rb') as fd:
