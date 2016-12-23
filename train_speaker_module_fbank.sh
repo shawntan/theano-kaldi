@@ -21,26 +21,26 @@ val_frame_files=($dir/pkl/dev.?*.pklgz)
 val_label_files=($dir/pkl/dev_lbl.?*.pklgz)
 feat_dim=40
 feat_dim=40
-context=5
+context=9
 device=$1
 for method in max
 do
     for batch_size in 10
     do
-        for learning_rate in 3e-4
+        for learning_rate in 5e-4
         do
             for gradient_clip in 1e20
             do
                 activation=softplus
                 speaker_latent=100
                 acoustic_latent=100
-                experiment_name=adamfix.${activation}.speaker-${speaker_latent}.acoustic-${acoustic_latent}.method-${method}.batch_size-${batch_size}.learning_rate-${learning_rate}.gradient_clip-${gradient_clip}.nanfilter
+                experiment_name=nonsim.adamfix.${activation}.speaker-${speaker_latent}.acoustic-${acoustic_latent}.method-${method}.batch_size-${batch_size}.learning_rate-${learning_rate}.gradient_clip-${gradient_clip}.nanfilter
                 experiment_dir=$dir/calibrating_vae/$experiment_name
                 model_params="--left-context $context --right-context $context \
                     --input-dimension $(( $feat_dim + 2 * ( $feat_dim * $context ) )) \
                     --speaker-structure  1024:1024:$speaker_latent \
                     --acoustic-structure 1024:1024:$acoustic_latent \
-                    --decoder-structure  1024:1024 \
+                    --decoder-structure  2048 \
                     --pooling-method     max       \
                     --activation-function $activation \
                     --shared-structure 1024"
@@ -52,7 +52,7 @@ do
                     --training-frame-files          ${frame_files[@]}    \
                     --validation-frame-files        ${val_frame_files[@]}    \
                     --batch-size $batch_size \
-                    --max-epochs 1000 \
+                    --max-epochs 900 \
                     $model_params \
                     --learning-rate $learning_rate \
                     --gradient-clip $gradient_clip \
