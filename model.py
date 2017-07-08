@@ -21,8 +21,10 @@ def build(P, structure, weights_file, training=True):
     classifier = feedforward.build_classifier(
         P, "classifier",
         [input_size], layer_sizes, output_size,
-        activation=T.nnet.sigmoid
+        activation=T.nnet.relu,
+        initial_weights=feedforward.relu_init
     )
+
     def predict(X):
         hiddens, outputs = classifier([X])
         return hiddens, outputs
