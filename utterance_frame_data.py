@@ -64,19 +64,19 @@ def batched_sort(stream,buffer_size=100):
 def batched_training_stream(batch_size):
     stream = training_stream()
     sort_buffer = 200
-    stream = batched_sort(stream,buffer_size=sort_buffer)
+#    stream = batched_sort(stream,buffer_size=sort_buffer)
     batched_stream = batched_utterances(stream,batch_size=batch_size)
     batched_stream = data_io.buffered_random(batched_stream,
-                        buffer_items= 2 * (sort_buffer/batch_size))
+                        buffer_items= 2 * max(sort_buffer/batch_size,1))
     return batched_stream
 
 @config.option("training_frame_files","Files for training frames.",
                 type=config.file,nargs='+')
 def training_stream(training_frame_files):
     split_streams = create_split_streams(training_frame_files)
-    split_streams = [ data_io.buffered_random(s) for s in split_streams ]
+    split_streams = [ s for s in split_streams ]
     stream = data_io.random_select_stream(*split_streams)
-    stream = data_io.buffered_random(stream,buffer_items=200)
+#    stream = data_io.buffered_random(stream,buffer_items=200)
     return stream
 
 @config.option("validation_frame_files","Files for validation frames.",

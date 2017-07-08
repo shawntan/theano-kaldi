@@ -77,14 +77,14 @@ if __name__ == "__main__":
 
     P = Parameters()
     training_costs = utterance_vae_shared.build(P)
-    
+
 
     X = T.tensor3('X')
     utt_lengths = T.ivector('utt_lengths')
-    
+
     speaker_latent_cost, acoustic_latent_cost, recon_cost = \
             training_costs(X,utt_lengths)
-    
+
     parameters = P.values()
     logging.info("Tuning parameters: " + ", ".join(w.name for w in parameters))
 
@@ -99,14 +99,14 @@ if __name__ == "__main__":
     batch_frame_count = T.sum(_utt_lengths)
     per_frame_acoustic_cost_est = T.sum(acoustic_latent_cost) / batch_frame_count
     per_frame_recon_cost_est = T.sum(recon_cost) / batch_frame_count
-    
+
     cost = T.mean(speaker_latent_cost,axis=0) / avg_frames_per_utterance +\
                     (per_frame_acoustic_cost_est + per_frame_recon_cost_est)
 
     cost_val = per_utterance_latent_cost_est + \
             per_utterance_acoustic_cost_est + \
             per_utterance_recon_cost_est
- 
+
 
     l2_weight = 0.5 / float(frame_count)
 #    l2_weight = 1e-3
