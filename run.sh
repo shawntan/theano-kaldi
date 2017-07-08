@@ -77,7 +77,7 @@ model_name=nosplice
 # Look at using log-normal distribution for the distribution of x
 
 [ -f $dir/pretrain.${model_name}.pkl ] || \
-    THEANO_FLAGS=device=gpu0 python -u $TK_DIR/pretrain_sda.py \
+    THEANO_FLAGS=device=cuda python -u $TK_DIR/pretrain_sda.py \
         --training-frame-files      ${frame_files[@]:2} \
         --validation-frame-files    ${frame_files[@]:0:2} \
         --structure                 $discriminative_structure \
@@ -86,7 +86,7 @@ model_name=nosplice
 
 
 [ -f $dir/discriminative.${model_name}.pkl ] || \
-    THEANO_FLAGS=device=gpu0 python -u $TK_DIR/train.py \
+    THEANO_FLAGS=device=cuda python -u $TK_DIR/train.py \
         --structure $discriminative_structure \
         --training-frame-files ${frame_files[@]:1} \
         --training-label-files ${label_files[@]:1} \
@@ -105,7 +105,7 @@ model_name=nosplice
 
 for set in dev test
 do
-    python_posteriors="THEANO_FLAGS=device=gpu0 \
+    python_posteriors="THEANO_FLAGS=device=cuda \
         python $TK_DIR/nnet_forward.py \
         --structure         $discriminative_structure \
         --weights-file      $dir/discriminative.${model_name}.pkl \
