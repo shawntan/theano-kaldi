@@ -96,11 +96,16 @@ def build_transform(
     def transform(X, activation=activation):
         Z = T.dot(X, W)
         if batch_norm:
+            mean = T.mean(Z, axis=0, keepdims=True)
+            std = T.std(Z, axis=0, keepdims=True)
+
+            mean.name = "%s_bn_mean" % name
+            std.name = "%s_bn_std" % name
             Z = T.nnet.bn.batch_normalization(
                 inputs=Z,
                 gamma=g, beta=b,
-                mean=T.mean(Z, axis=0, keepdims=True),
-                std=T.std(Z, axis=0, keepdims=True),
+                mean=mean,
+                std=std,
                 mode='low_mem'
             )
         else:
