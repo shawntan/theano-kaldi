@@ -73,16 +73,16 @@ label_files=($dir/pkl/train_lbl.?*.pklgz)
 input_dim=`copy-feats scp:$dir/data/train/feats.scp ark:- | eval $feat_transform | feat-to-dim ark:- -`
 
 discriminative_structure="1353:1024:1024:1024:1024:1024:1024:$num_pdfs"
-model_name=nosplice
+model_name=nosplice.bn
 # Look at using log-normal distribution for the distribution of x
 
-[ -f $dir/pretrain.${model_name}.pkl ] || \
-    THEANO_FLAGS=device=cuda python -u $TK_DIR/pretrain_sda.py \
-        --training-frame-files      ${frame_files[@]:2} \
-        --validation-frame-files    ${frame_files[@]:0:2} \
-        --structure                 $discriminative_structure \
-        --batch-size 128 --max-epochs 5 \
-        --output-file $dir/pretrain.${model_name}.pkl
+#[ -f $dir/pretrain.${model_name}.pkl ] || \
+#    THEANO_FLAGS=device=cuda python -u $TK_DIR/pretrain_sda.py \
+#        --training-frame-files      ${frame_files[@]:2} \
+#        --validation-frame-files    ${frame_files[@]:0:2} \
+#        --structure                 $discriminative_structure \
+#        --batch-size 128 --max-epochs 5 \
+#        --output-file $dir/pretrain.${model_name}.pkl
 
 
 [ -f $dir/discriminative.${model_name}.pkl ] || \
@@ -93,16 +93,15 @@ model_name=nosplice
         --validation-frame-files ${frame_files[@]:0:1} \
         --validation-label-files ${label_files[@]:0:1} \
         --max-epochs 50 \
-        --batch-size 128 \
+        --batch-size 256 \
         --improvement-threshold 0.999 \
-        --weights-file   $dir/pretrain.${model_name}.pkl \
         --learning-file  $dir/discriminative.${model_name}.learning \
         --temporary-file $dir/discriminative.${model_name}.tmp \
         --output-file    $dir/discriminative.${model_name}.pkl \
-        --initial-learning-rate  0.08 \
+        --initial-learning-rate 0.2 \
         --momentum 0.9 \
         --log -
-
+#  --weights-file   $dir/pretrain.nosplice.pkl \
 for set in dev test
 do
     python_posteriors="THEANO_FLAGS=device=cuda \

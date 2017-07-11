@@ -45,7 +45,7 @@ def build_classifier(
         P, "%s_output" % name, hidden_sizes[-1], output_size,
         initial_weights=output_weights,
         activation=output_activation,
-        batch_norm=batch_norm
+        batch_norm=False
     )
 
     def classify(Xs):
@@ -148,7 +148,7 @@ def build_combine_transform(
                 mode='low_mem'
             )
         else:
-            Z = Z + b
+            Z = acc + b
         output = activation(Z)
         output.name = name
         return output

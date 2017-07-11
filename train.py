@@ -52,6 +52,7 @@ def final_save(P, output_file):
 @config.option("momentum", "Momentum to use for gradient step.", type=config.float)
 def build_updates(parameters, gradients, update_vars, initial_learning_rate, momentum):
     update_vars._learning_rate = initial_learning_rate
+    # gradients = updates.clip_deltas(gradients, 5)
     return updates.momentum(parameters, gradients, P=P,
                             learning_rate=update_vars._learning_rate,
                             mu=momentum)
@@ -117,8 +118,8 @@ if __name__ == "__main__":
     _, outputs = predict(X)
     cross_entropy = T.mean(crossentropy(outputs, Y))
     parameters = P.values()
-    loss = cross_entropy + \
-        (0.5 / total_frames) * sum(T.sum(T.sqr(w)) for w in parameters)
+    loss = cross_entropy# + \
+        #(0.5 / total_frames) * sum(T.sum(T.sqr(w)) for w in parameters)
 
     gradients = T.grad(loss, wrt=parameters)
     logging.info("Parameters to tune:" +

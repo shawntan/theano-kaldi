@@ -10,7 +10,8 @@ import config
 import model
 
 
-@config.option("class_counts_file", "Files for counts of each class.", type=config.file)
+@config.option("class_counts_file", "Files for counts of each class.",
+               type=config.file)
 def load_counts(class_counts_file):
     with open(class_counts_file) as f:
         row = f.next().strip().strip('[]').strip()
@@ -26,7 +27,7 @@ def log_softmax(output):
         print >> sys.stderr, "Stable log softmax"
         return x - sum_x
     else:
-        return T.log(softmax)
+        return T.log(T.nnet.softmax(output))
 
 
 if __name__ == "__main__":
@@ -41,9 +42,39 @@ if __name__ == "__main__":
         inputs=[X],
         outputs=log_softmax(outputs) - T.log(counts / T.sum(counts))
     )
-
-    if predict != None:
-        stream = data_io.context(
-            ark_io.parse_binary(sys.stdin), left=5, right=5)
+    buffer_size = 64
+    if predict is not None:
+        stream = data_io.context(ark_io.parse_binary(sys.stdin),
+                                 left=5, right=5)
+        stream_buffer = [None] * buffer_size
+        ptr = 0
         for name, frames in stream:
-            ark_io.print_ark_binary(sys.stdout, name, predict(frames))
+            stream_buffer[ptr] = name, frames
+            ptr += 1
+            if ptr == buffer_size:
+                prediction = predict(
+                    np.concatenate([f for _, f in stream_buffer], axis=0)
+                )
+                ptr = 0
+
+                out_ptr = 0
+                for i, (b_name, b_frames) in enumerate(stream_buffer):
+                    ark_io.print_ark_binary(
+                        sys.stdout, b_name,
+                        prediction[out_ptr:out_ptr + b_frames.shape[0]]
+                    )
+                    out_ptr = out_ptr + b_frames.shape[0]
+        if ptr > 0:
+            stream_buffer = stream_buffer[:ptr]
+            prediction = predict(
+                np.concatenate([f for _, f in stream_buffer], axis=0)
+            )
+            ptr = 0
+
+            out_ptr = 0
+            for i, (b_name, b_frames) in enumerate(stream_buffer):
+                ark_io.print_ark_binary(
+                    sys.stdout, b_name,
+                    prediction[out_ptr:out_ptr + b_frames.shape[0]]
+                )
+                out_ptr = out_ptr + b_frames.shape[0]
