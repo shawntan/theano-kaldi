@@ -85,7 +85,7 @@ model_name=nosplice.bn
 #        --output-file $dir/pretrain.${model_name}.pkl
 
 
-[ -f $dir/discriminative.${model_name}.pkl ] || \
+#[ -f $dir/discriminative.${model_name}.pkl ] || \
     THEANO_FLAGS=device=cuda python -u $TK_DIR/train.py \
         --structure $discriminative_structure \
         --training-frame-files ${frame_files[@]:1} \
@@ -93,7 +93,7 @@ model_name=nosplice.bn
         --validation-frame-files ${frame_files[@]:0:1} \
         --validation-label-files ${label_files[@]:0:1} \
         --max-epochs 50 \
-        --batch-size 256 \
+        --batch-size 1024 \
         --improvement-threshold 0.999 \
         --learning-file  $dir/discriminative.${model_name}.learning \
         --temporary-file $dir/discriminative.${model_name}.tmp \
@@ -101,13 +101,20 @@ model_name=nosplice.bn
         --initial-learning-rate 0.2 \
         --momentum 0.9 \
         --log -
+
+THEANO_FLAGS=device=cuda python2 -u theano-kaldi/compute_statistics.py \
+    --structure $discriminative_structure \
+    --training-frame-files ${frame_files[@]} \
+    --training-label-files ${label_files[@]} \
+    --model-file        $dir/discriminative.${model_name}.pkl \
+    --augmented-file    $dir/discriminative.${model_name}.with_stats.pkl \
 #  --weights-file   $dir/pretrain.nosplice.pkl \
 for set in dev test
 do
-    python_posteriors="THEANO_FLAGS=device=cuda \
+    python_posteriors="THEANO_FLAGS=device=cuda,optimizer=None \
         python $TK_DIR/nnet_forward.py \
         --structure         $discriminative_structure \
-        --weights-file      $dir/discriminative.${model_name}.pkl \
+        --model-file      $dir/discriminative.${model_name}.with_stats.pkl \
         --class-counts-file $dir/decode_${set}_${model_name}/class.counts"
 
     feats="copy-feats scp:$dir/data/$set/feats.scp ark:- \

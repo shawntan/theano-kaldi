@@ -28,7 +28,6 @@ def build_classifier(
         output_weights=lambda x, y: np.zeros((x, y)),
         batch_norm=False):
 
-
     combine_inputs = build_combine_transform(
             P, "%s_input" % name,
             input_sizes, hidden_sizes[0],
@@ -92,25 +91,28 @@ def build_transform(
         P['g_%s' % name] = np.ones(output_size)
         g = P['g_%s' % name]
 
-
     def transform(X, activation=activation):
         Z = T.dot(X, W)
         if batch_norm:
-            mean = T.mean(Z, axis=0, keepdims=True)
-            std = T.std(Z, axis=0, keepdims=True)
-
-            mean.name = "%s_bn_mean" % name
-            std.name = "%s_bn_std" % name
-            Z = T.nnet.bn.batch_normalization(
-                inputs=Z,
-                gamma=g, beta=b,
-                mean=mean,
-                std=std,
-                mode='low_mem'
-            )
+            if any(n.name == "%s_bn_statistic_mean" % name
+                   for n in P.values()):
+                mean = P["%s_bn_statistic_mean" % name]
+                var = P["%s_bn_statistic_var" % name]
+                Z = T.nnet.bn.batch_normalization_test(
+                    inputs=Z,
+                    gamma=g, beta=b,
+                    axes=(0,),
+                    mean=mean, var=var
+                )
+            else:
+                Z.name = "%s_bn_statistic" % name
+                Z = T.nnet.bn.batch_normalization_train(
+                    inputs=Z,
+                    gamma=g, beta=b,
+                    axes=(0,)
+                )[0]
         else:
             Z = Z + b
-
         Z.name = "%s_%d" % (name, output_size)
         output = activation(Z)
         if hasattr(output, "name"):
@@ -145,13 +147,23 @@ def build_combine_transform(
             else:
                 acc += T.dot(X, W)
         if batch_norm:
-            Z = T.nnet.bn.batch_normalization(
-                inputs=acc,
-                gamma=g, beta=b,
-                mean=T.mean(acc, axis=0, keepdims=True),
-                std=T.std(acc, axis=0, keepdims=True),
-                mode='low_mem'
-            )
+            if any(n.name == "%s_bn_statistic_mean" % name
+                   for n in P.values()):
+                mean = P["%s_bn_statistic_mean" % name]
+                var = P["%s_bn_statistic_var" % name]
+                Z = T.nnet.bn.batch_normalization_test(
+                    inputs=acc,
+                    gamma=g, beta=b,
+                    axes=(0,),
+                    mean=mean, var=var
+                )
+            else:
+                acc.name = "%s_bn_statistic" % name
+                Z = T.nnet.bn.batch_normalization_train(
+                    inputs=acc,
+                    gamma=g, beta=b,
+                    axes=(0,)
+                )[0]
         else:
             Z = acc + b
         output = activation(Z)

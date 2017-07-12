@@ -8,6 +8,16 @@ from theano_toolkit.parameters import Parameters
 
 import config
 import model
+import cPickle as pickle
+
+
+@config.option("model_file", "Saved parameters.")
+def load_state(P, model_file):
+    data = pickle.load(open(model_file))
+    for k in data:
+        P[k] = data[k]
+    print >> sys.stderr, P.values()
+    P.load(model_file)
 
 
 @config.option("class_counts_file", "Files for counts of each class.",
@@ -35,6 +45,7 @@ if __name__ == "__main__":
 
     X = T.matrix('X')
     P = Parameters()
+    load_state(P)
     predict = model.build(P)
     _, outputs = predict(X)
     counts = load_counts()

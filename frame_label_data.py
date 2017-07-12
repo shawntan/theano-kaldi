@@ -35,9 +35,9 @@ def training_stream(training_frame_files, training_label_files):
 
 
 @config.option("validation_frame_files", "Files for validation frames.",
-               type=config.file, nargs='+', default=None)
+               type=config.file, nargs='+', default='')
 @config.option("validation_label_files", "Files for validation labels.",
-               type=config.file, nargs='+', default=None)
+               type=config.file, nargs='+', default='')
 def validation_stream(validation_frame_files, validation_label_files):
     from itertools import chain
     split_streams = create_split_streams(
