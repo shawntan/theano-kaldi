@@ -85,14 +85,14 @@ def build_speaker_inferer(P, input_dimension, layer_size, speaker_latent_size,
     return speaker_encode
 
 
-def build_conv_transform(P, input_size, output_size, context=5):
+def build_conv_transform(P, name, input_size, output_size, context=5):
     W_val = weight_init(
         input_size * (2 * context + 1),
         output_size
     ).reshape((output_size, input_size, 1, 2 * context + 1))
     print W_val.shape
-    P.W_input_conv = W_val
-    P.b_input_conv = np.zeros((output_size,))
+    P['W_%s_input_conv' % name] = W_val
+    P['b_%s_input_conv' % name] = np.zeros((output_size,))
     W = P.W_input_conv
     b = P.b_input_conv.dimshuffle('x', 0, 'x', 'x')
 
@@ -124,7 +124,7 @@ def build_encoder(P, input_dimension, shared_structure, acoustic_structure,
     speaker_latent_size = speaker_structure[-1]
 
     shared_transform = build_conv_transform(
-        P,
+        P, name="encoder",
         input_size=input_dimension,
         output_size=shared_structure[-1],
         context=5
@@ -171,9 +171,16 @@ def build(P, input_dimension, acoustic_structure, speaker_structure,
 
     speaker_encode, acoustic_encode = build_encoder(P)
 
+    decode_conv = build_conv_transform(
+        P, name="decoder",
+        input_size=acoustic_latent_size,
+        output_size=decoder_layer_sizes[0],
+        context=5
+    )
+
     decode = vae.build_inferer(
         P, name="decode",
-        input_sizes=[acoustic_latent_size,
+        input_sizes=[decoder_layer_sizes[0],
                      speaker_latent_size],
         hidden_sizes=decoder_layer_sizes,
         output_size=input_dimension,
@@ -207,7 +214,8 @@ def build(P, input_dimension, acoustic_structure, speaker_structure,
         # Combine distributions for utterance
 
         # Reconstruct
-        _, recon_X_mean, recon_X_std = decode([acoustic, utterance_speaker])
+        acoustic_conv = decode_conv(acoustic, mask)[-1]
+        _, recon_X_mean, recon_X_std = decode([acoustic_conv, utterance_speaker])
 
         acoustic_latent_cost = vae.kl_divergence(
             acoustic_mean, acoustic_std, 0, 1)  # batch_size, sequence_length
