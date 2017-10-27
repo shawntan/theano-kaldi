@@ -1,5 +1,3 @@
-import config
-import logging
 import numpy as np
 import theano
 

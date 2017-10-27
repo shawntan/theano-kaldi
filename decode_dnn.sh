@@ -11,18 +11,20 @@ TK_DIR=$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )
 
 ## Begin configuration section
 stage=0
-nj=16
+nj=4
 cmd=run.pl
 num_threads=1
 
-max_active=7000 # max-active
-beam=15.0 # beam used
-latbeam=7.0 # beam used in getting lattices
-acwt=0.1 # acoustic weight used in getting lattices
-max_arcs=-1
+acwt=0.10 # note: only really affects pruning (scoring is on lattices).
+beam=13.0
+latbeam=8.0
+min_active=200
+max_active=7000 # limit of active tokens
+max_mem=50000000 # approx. limit to memory consumption during minimization in bytes
+nnet_forward_opts="--no-softmax=true --prior-scale=1.0"
 
-skip_scoring=false # whether to skip WER scoring
-scoring_opts=
+skip_scoring=false
+scoring_opts="--min-lmwt 4 --max-lmwt 15"
 
 norm_vars=false # when doing cmvn, whether to normalize variance; has to be consistent with build_nnet_pfile.sh
 
@@ -76,11 +78,20 @@ $cmd $dir/log/class_count.log \
 
 finalfeats="ark,s,cs:$featstring |"
 $cmd JOB=1:$nj $dir/log/decode.JOB.log \
-  latgen-faster-mapped --max-active=$max_active --beam=$beam --lattice-beam=$latbeam --acoustic-scale=$acwt --allow-partial=true --word-symbol-table=$graphdir/words.txt $alidir/final.mdl $graphdir/HCLG.fst "$finalfeats" "ark:|gzip -c > $dir/lat.JOB.gz"
+    latgen-faster-mapped \
+    --min-active=$min_active \
+    --max-active=$max_active \
+    --max-mem=$max_mem \
+    --beam=$beam \
+    --lattice-beam=$latbeam \
+    --acoustic-scale=$acwt \
+    --allow-partial=true \
+    --word-symbol-table=$graphdir/words.txt \
+    $alidir/final.mdl $graphdir/HCLG.fst "$finalfeats" "ark:|gzip -c > $dir/lat.JOB.gz"
 
 # Copy the source model in order for scoring
 cp $alidir/final.mdl $srcdir
-  
+
 if ! $skip_scoring ; then
   [ ! -x local/score.sh ] && \
     echo "$0: not scoring because local/score.sh does not exist or not executable." && exit 1;

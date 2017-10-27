@@ -12,7 +12,7 @@ import numpy as np
 @config.option("model_file", "Saved parameters.")
 def load_state(P, model_file):
     logging.info("Loading previous model and state.")
-    P.load(model_file)
+    P.load(model_file, strict=False)
 
 
 @config.option("augmented_file", "Augmented with stats")
@@ -27,7 +27,6 @@ if __name__ == "__main__":
     new_stats = {}
     while True:
         P = Parameters()
-
         for stat_name in new_stats:
             print "Adding ", stat_name
             P[stat_name] = new_stats[stat_name]
@@ -65,7 +64,7 @@ if __name__ == "__main__":
         sqr_mean = total_stat_sqr_sum / total_count
         var = sqr_mean - mean**2
         print mean
-        print (mean**2).sum()
+        print var
         print "Assigning %s statistics to parameters.." % var_name
         new_stats["%s_mean" % var_name] = mean
         new_stats["%s_var" % var_name] = var

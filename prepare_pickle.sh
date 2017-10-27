@@ -40,7 +40,7 @@ idx=${filename##*.}
 		| python2 -u "'$TK_DIR'/pickle_ark_stream.py" "'"$output_prefix"'.$idx.pklgz"
 
 	gunzip -c $( ls '"$ali_dir"'/ali.*.gz | sort -V ) \
-		| ali-to-pdf "'"$ali_dir"'/final.mdl" ark:- ark,t:- \
+		| ali-to-pdf "'"$ali_dir"'/final.mdl" ark:- ark,t:- | sort \
 		| grep -F -f $filename \
 		| python2 "'$TK_DIR'/pickle_ali.py" "'"$output_prefix"'_lbl.$idx.pklgz"
 

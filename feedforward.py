@@ -82,7 +82,7 @@ def build_stacked_transforms(
 def build_transform(
         P, name, input_size, output_size,
         initial_weights,
-        activation, batch_norm=True):
+        activation, batch_norm=False):
     P["W_%s" % name] = initial_weights(input_size, output_size)
     P["b_%s" % name] = np.zeros((output_size,), dtype=np.float32)
     W = P["W_%s" % name]
@@ -96,6 +96,8 @@ def build_transform(
         if batch_norm:
             if any(n.name == "%s_bn_statistic_mean" % name
                    for n in P.values()):
+                import sys
+                print >> sys.stderr, "%s running on test" % name
                 mean = P["%s_bn_statistic_mean" % name]
                 var = P["%s_bn_statistic_var" % name]
                 Z = T.nnet.bn.batch_normalization_test(
@@ -103,6 +105,8 @@ def build_transform(
                     gamma=g, beta=b,
                     axes=(0,),
                     mean=mean, var=var
+                    #mean=T.mean(Z, axis=0),
+                    #var=T.var(Z, axis=0)
                 )
             else:
                 Z.name = "%s_bn_statistic" % name
@@ -124,7 +128,7 @@ def build_transform(
 def build_combine_transform(
         P, name, input_sizes, output_size,
         initial_weights,
-        activation, batch_norm=True):
+        activation, batch_norm=False):
     weights = initial_weights(sum(input_sizes), output_size)
 
     Ws = []
@@ -149,6 +153,8 @@ def build_combine_transform(
         if batch_norm:
             if any(n.name == "%s_bn_statistic_mean" % name
                    for n in P.values()):
+                import sys
+                print >> sys.stderr, "%s running on test" % name
                 mean = P["%s_bn_statistic_mean" % name]
                 var = P["%s_bn_statistic_var" % name]
                 Z = T.nnet.bn.batch_normalization_test(
@@ -156,7 +162,10 @@ def build_combine_transform(
                     gamma=g, beta=b,
                     axes=(0,),
                     mean=mean, var=var
+                    #mean=T.mean(acc, axis=0),
+                    #var=T.var(acc, axis=0)
                 )
+
             else:
                 acc.name = "%s_bn_statistic" % name
                 Z = T.nnet.bn.batch_normalization_train(

@@ -11,13 +11,19 @@ import model
 import cPickle as pickle
 
 
-@config.option("model_file", "Saved parameters.")
-def load_state(P, model_file):
+model_file = config.option("model_file", "Saved parameters.")
+
+
+@model_file
+def first_load(P, model_file):
     data = pickle.load(open(model_file))
     for k in data:
         P[k] = data[k]
-    print >> sys.stderr, P.values()
-    P.load(model_file)
+
+
+@model_file
+def load(P, model_file):
+    P.load(model_file, strict=False)
 
 
 @config.option("class_counts_file", "Files for counts of each class.",
@@ -44,8 +50,8 @@ if __name__ == "__main__":
     config.parse_args()
 
     X = T.matrix('X')
-    P = Parameters()
-    load_state(P)
+    P = Parameters(allow_overrides=True)
+    first_load(P)
     predict = model.build(P)
     _, outputs = predict(X)
     counts = load_counts()
@@ -53,6 +59,7 @@ if __name__ == "__main__":
         inputs=[X],
         outputs=log_softmax(outputs) - T.log(counts / T.sum(counts))
     )
+    load(P)
     buffer_size = 64
     if predict is not None:
         stream = data_io.context(ark_io.parse_binary(sys.stdin),

@@ -5,22 +5,30 @@ import numpy as np
 from itertools import izip
 import random
 
+cache = {}
+
 
 def context(stream, left=5, right=5):
-    left_buf = right_buf = None
-    idxs = np.arange(1000).reshape(1000, 1) + np.arange(left + 1 + right)
     for name, frames in stream:
-        dim = frames.shape[1]
-        if left_buf is None:
-            left_buf = np.zeros((left, dim), dtype=np.float32)
-            right_buf = np.zeros((right, dim), dtype=np.float32)
-        length = frames.shape[0]
-        if length > idxs.shape[0]:
-            idxs = np.arange(length).reshape(length, 1) +\
-                np.arange(left + 1 + right)
-        frames = np.concatenate([left_buf, frames, right_buf])
-        frames = frames[idxs[:length]]
-        frames = frames.reshape(length, (left + 1 + right) * dim)
+        if not (left == 0 and right == 0):
+            dim = frames.shape[1]
+
+            if (left, right, dim) in cache:
+                left_buf, right_buf, idxs = cache[left, right, dim]
+            else:
+                left_buf = np.zeros((left, dim), dtype=np.float32)
+                right_buf = np.zeros((right, dim), dtype=np.float32)
+                idxs = (np.arange(1000).reshape(1000, 1) +
+                        np.arange(left + 1 + right))
+                cache[left, right, dim] = left_buf, right_buf, idxs
+
+            length = frames.shape[0]
+            if length > idxs.shape[0]:
+                idxs = np.arange(length).reshape(length, 1) +\
+                    np.arange(left + 1 + right)
+            frames = np.concatenate([left_buf, frames, right_buf])
+            frames = frames[idxs[:length]]
+            frames = frames.reshape(length, (left + 1 + right) * dim)
         yield name, frames
 
 
@@ -39,6 +47,7 @@ def async(stream, queue_size):
     import Queue
     queue = Queue.Queue(maxsize=queue_size)
     end_marker = object()
+
     def producer():
         for item in stream:
             queue.put(item)
@@ -73,16 +82,20 @@ def zip_streams(*streams, **kwargs):
     with_name = kwargs.get('with_name', False)
     while True:
         items = [s.next() for s in streams]
-        if not all(x[0] == items[0][0] for x in items):
-            print ','.join(x[0] for x in items)
-            assert(all(x[0] == items[0][0] for x in items))
-#        while not all(x[0]==items[0][0] for x in items):
-#            for i in xrange(len(items)-1):
-#                items[i] = streams[i].next()
+#        if not all(x[0] == items[0][0] for x in items):
+#            print ','.join(x[0] for x in items)
+#            assert(all(x[0] == items[0][0] for x in items))
+        while not all(x[0] == items[0][0] for x in items):
+            #print ','.join(x[0] for x in items)
+            if items[0][0] > items[1][0]:
+                items[1] = streams[1].next()
+            else:
+                items[0] = streams[0].next()
         result = tuple(x[1] for x in items)
 
         if with_name:
             result = (items[0][0],) + result
+
         yield result
 
 

@@ -37,6 +37,7 @@ def build_trainer(inputs, updates, outputs=None, batch_size=256, mapping=None):
         givens={var: shared_var[idx * batch_size:(idx + 1) * batch_size]
                 for var, shared_var in mapping.iteritems()},
     )
+
     def chunk_train(chunk):
         batch_count = int(math.ceil(chunk[0].shape[0] / float(batch_size)))
         for in_var, data in izip(inputs, chunk):
@@ -51,11 +52,12 @@ def build_trainer(inputs, updates, outputs=None, batch_size=256, mapping=None):
 
 
 @batch_size
-def stream(stream, batch_size, batch_per_chunk=256):
+def stream(stream, batch_size, batch_per_chunk=32):
     buffer_size = batch_per_chunk * batch_size
 
     def initialise_buffers(items):
-        buffers = tuple(np.empty((buffer_size,) + item.shape[1:], dtype=item.dtype)
+        buffers = tuple(np.empty((buffer_size,) + item.shape[1:],
+                                 dtype=item.dtype)
                         for item in items)
         return buffers, 0
 

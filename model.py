@@ -15,8 +15,8 @@ def build(P, structure, weights_file, training=True):
     classifier = feedforward.build_classifier(
         P, "classifier",
         [input_size], layer_sizes, output_size,
-        activation=T.nnet.sigmoid,
-        initial_weights=feedforward.initial_weights,
+        activation=T.nnet.relu,
+        initial_weights=feedforward.relu_init,
         batch_norm=True
     )
 

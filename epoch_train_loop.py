@@ -1,7 +1,8 @@
 import config
 
 
-@config.option("max_epochs", "Maximum number of epochs to iterate.", type=config.int)
+@config.option("max_epochs", "Maximum number of epochs to iterate.",
+               type=config.int)
 def loop(get_data_stream, item_action, epoch_callback, max_epochs):
     epoch_count = 0
     epoch_callback(epoch_count)

@@ -1,16 +1,9 @@
-import sys
 import logging
-import json
 
-import theano
 import theano.tensor as T
-import numpy as np
-import math
 
 import data_io
-import cPickle as pickle
-from pprint import pprint
-from itertools import izip, chain
+from itertools import chain
 from theano_toolkit import updates
 from theano_toolkit.parameters import Parameters
 
@@ -48,9 +41,12 @@ def final_save(P, output_file):
     P.save(output_file)
 
 
-@config.option("initial_learning_rate", "Learning rate for gradient step.", type=config.float)
-@config.option("momentum", "Momentum to use for gradient step.", type=config.float)
-def build_updates(parameters, gradients, update_vars, initial_learning_rate, momentum):
+@config.option("initial_learning_rate", "Learning rate for gradient step.",
+               type=config.float)
+@config.option("momentum", "Momentum to use for gradient step.",
+               type=config.float)
+def build_updates(parameters, gradients, update_vars,
+                  initial_learning_rate, momentum):
     update_vars._learning_rate = initial_learning_rate
     # gradients = updates.clip_deltas(gradients, 5)
     return updates.momentum(parameters, gradients, P=P,
@@ -58,11 +54,14 @@ def build_updates(parameters, gradients, update_vars, initial_learning_rate, mom
                             mu=momentum)
 
 
-@config.option("learning_rate_decay", "Factor to multiply when no improvement.",
+@config.option("learning_rate_decay",
+               "Factor to multiply when no improvement.",
                default=0.5, type=config.float)
-@config.option("improvement_threshold", "Improvement threshold",
+@config.option("improvement_threshold",
+               "Improvement threshold",
                default=0.99, type=config.float)
-def build_validation_callback(P, update_vars, learning_rate_decay, improvement_threshold):
+def build_validation_callback(P, update_vars, learning_rate_decay,
+                              improvement_threshold):
     def validation_callback(prev_score, curr_score):
         current_learning_rate = update_vars._learning_rate.get_value()
         if curr_score < prev_score:
@@ -70,8 +69,10 @@ def build_validation_callback(P, update_vars, learning_rate_decay, improvement_t
 
         if curr_score > prev_score * improvement_threshold:
             load_state(P, update_vars)
-            logging.info("Decaying learning rate: %0.5f -> %0.5f" % (current_learning_rate,
-                                                                     current_learning_rate * learning_rate_decay))
+            logging.info("Decaying learning rate: %0.5f -> %0.5f" % (
+                current_learning_rate,
+                current_learning_rate * learning_rate_decay
+            ))
             update_vars._learning_rate.set_value(
                 current_learning_rate * learning_rate_decay)
 
@@ -118,7 +119,7 @@ if __name__ == "__main__":
     _, outputs = predict(X)
     cross_entropy = T.mean(crossentropy(outputs, Y))
     parameters = P.values()
-    loss = cross_entropy# + \
+    loss = cross_entropy # + \
         #(0.5 / total_frames) * sum(T.sum(T.sqr(w)) for w in parameters)
 
     gradients = T.grad(loss, wrt=parameters)
@@ -126,6 +127,7 @@ if __name__ == "__main__":
                  ', '.join(sorted(w.name for w in parameters)))
 
     update_vars = Parameters()
+
     logging.debug("Compiling functions...")
     chunk_trainer = chunk.build_trainer(
         inputs=[X, Y],
@@ -147,7 +149,7 @@ if __name__ == "__main__":
     epoch_train_loop.loop(
         get_data_stream=lambda: data_io.async(
             chunk.stream(frame_label_data.training_stream()),
-            queue_size=5
+            queue_size=2
         ),
         item_action=chunk_trainer,
         epoch_callback=build_epoch_callback()
