@@ -1,6 +1,5 @@
 import config
 import data_io
-from itertools import izip
 import numpy as np
 
 
@@ -25,7 +24,7 @@ def batched_utterances(stream, batch_size):
             f.shape[0]
             for (f,) in batch_buffer
         ], dtype=np.int32)
-        batch_frames = np.empty((
+        batch_frames = np.zeros((
             len(batch_buffer),
             np.max(batch_utt_lengths),
             batch_buffer[0][0].shape[1]

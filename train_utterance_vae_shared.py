@@ -14,12 +14,15 @@ import utterance_vae_conv
 import epoch_train_loop
 import validator
 
+PRINT_GRADIENTS = False
+
 
 @config.option("gradient_clip", "Gradient magnitude clipping.",
                type=config.float)
 @config.option("learning_rate", "Learning rate.", type=config.float)
 def build_updates(parameters, gradients, update_vars,
                   gradient_clip, learning_rate):
+#    gradients = updates.clip_deltas(gradients, gradient_clip)
     return updates.adam(parameters, gradients,
                         learning_rate=learning_rate,
                         P=update_vars)
@@ -43,7 +46,13 @@ def build_train_function(inputs, outputs, updates, iteration_log):
 
         def train(args):
             values = train_fn(*args)
-            print >> fd, ' '.join(str(v) for v in values)
+            if PRINT_GRADIENTS:
+                from pprint import pprint
+                pprint(values)
+                if any(np.isnan(values[k]).any() for k in values):
+                    exit()
+            else:
+                print >> fd, ' '.join(str(v) for v in values)
     else:
         def train(args):
             train_fn(*args)
@@ -110,28 +119,30 @@ if __name__ == "__main__":
         acoustic_latent_cost) / batch_frame_count
     per_frame_recon_cost_est = T.sum(recon_cost) / batch_frame_count
 
-    cost = T.mean(speaker_latent_cost, axis=0) / avg_frames_per_utterance +\
-        (per_frame_acoustic_cost_est + per_frame_recon_cost_est)
+    cost = ((T.mean(speaker_latent_cost, axis=0) / avg_frames_per_utterance) +
+            per_frame_acoustic_cost_est +
+            per_frame_recon_cost_est)
 
     cost_val = per_utterance_latent_cost_est + \
         per_utterance_acoustic_cost_est + \
         per_utterance_recon_cost_est
 
     l2_weight = 0.5 / float(frame_count)
-    loss = cost +\
-        l2_weight * sum(
-            T.sum(T.sqr(w)) for w in parameters
-            if w.name not in [])
+    loss = (cost +
+            l2_weight * sum(
+                 T.sum(T.sqr(w)) for w in parameters
+                 if w.name not in []
+            ))
 
-    factor = np.sqrt(avg_frames_per_utterance)
-    P.W_acoustic_encoder_input_1.set_value(
-        P.W_acoustic_encoder_input_1.get_value() / factor)
-    P.W_decode_input_1.set_value(
-        P.W_decode_input_1.get_value() / factor)
-    P.W_speaker_encoder_pooled_mean.set_value(
-        P.W_speaker_encoder_pooled_mean.get_value() / factor)
-    P.W_speaker_encoder_pooled_std.set_value(
-        P.W_speaker_encoder_pooled_std.get_value() / factor)
+#    factor = np.sqrt(avg_frames_per_utterance)
+#    P.W_acoustic_encoder_input_1.set_value(
+#        P.W_acoustic_encoder_input_1.get_value() / factor)
+#    P.W_decode_input_1.set_value(
+#        P.W_decode_input_1.get_value() / factor)
+#    P.W_speaker_encoder_pooled_mean.set_value(
+#        P.W_speaker_encoder_pooled_mean.get_value() / factor)
+#    P.W_speaker_encoder_pooled_std.set_value(
+#        P.W_speaker_encoder_pooled_std.get_value() / factor)
 #    P.W_acoustic_encoder_mean.set_value(
 #            P.W_acoustic_encoder_mean.get_value() / 10)
 #    P.W_acoustic_encoder_std.set_value(
@@ -140,20 +151,32 @@ if __name__ == "__main__":
     gradients = T.grad(loss, wrt=parameters)
     update_vars = Parameters()
 
-    k = reduce(T.maximum, (T.max(abs(w)) for w in gradients))
-    grad_mag = k * T.sqrt(sum(T.sum(T.sqr(w / k)) for w in gradients))
-    logging.info("Compiling training function")
-    train = build_train_function(
-        inputs=[X, utt_lengths],
-        outputs=[
+    k = T.max([T.max(abs(w)) for w in gradients])
+    grad_mag = T.sqrt(sum(T.sum(T.sqr(w / k)) for w in gradients)) * k
+
+    deltas = gradients
+    delta_sum = sum(T.sum(d) for d in deltas)
+    not_finite = T.isnan(delta_sum) | T.isinf(delta_sum)
+    if PRINT_GRADIENTS:
+        outputs = {p.name: T.mean(abs(g))
+                   for p, g in zip(parameters, gradients)}
+        outputs['recon_cost'] = ((per_utterance_recon_cost_est * X.shape[0]) /
+                                 T.sum(_utt_lengths))
+    else:
+        outputs = [
             per_utterance_latent_cost_est,
             (per_utterance_acoustic_cost_est *
              X.shape[0]) / T.sum(_utt_lengths),
             (per_utterance_recon_cost_est * X.shape[0]) / T.sum(_utt_lengths),
             T.mean(_utt_lengths),
             grad_mag,
+            not_finite,
             loss,
-        ],
+        ]
+    logging.info("Compiling training function")
+    train = build_train_function(
+        inputs=[X, utt_lengths],
+        outputs=outputs,
         updates=build_updates(parameters, gradients, update_vars=update_vars)
     )
 
@@ -175,12 +198,9 @@ if __name__ == "__main__":
         logging.info("Epoch %d done." % x)
         report = validate()
         logging.info(report)
-    
     logging.info("Trying to load previous train state..")
     load_previous_train_state(P, update_vars)
 
-#    P.W_acoustic_encoder_input_0.set_value(4 * P.W_acoustic_encoder_input_0.get_value())
-#    P.W_speaker_encoder_pooled_input_0.set_value(4 * P.W_speaker_encoder_pooled_input_0.get_value())
     logging.info("Starting training...")
     epoch_train_loop.loop(
         get_data_stream=lambda: data_io.async(

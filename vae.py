@@ -1,4 +1,3 @@
-import theano
 import theano.tensor as T
 import numpy as np
 from theano_toolkit import utils as U
@@ -14,7 +13,7 @@ def build(P, name,
           activation=T.nnet.softplus,
           initial_weights=feedforward.relu_init):
 
-    if decoder_hidden_sizes == None:
+    if decoder_hidden_sizes is None:
         decoder_hidden_sizes = encoder_hidden_sizes[::-1]
 
     encode = build_inferer(P, "%s_encoder" % name,
@@ -79,15 +78,23 @@ def build_inferer(P, name, input_sizes, hidden_sizes, output_size,
     return infer
 
 
-def build_encoder_output(P, name, input_size, output_size, initialise_weights=None):
+def build_encoder_output(P, name, input_size, output_size,
+                         initialise_weights=None):
 
     if initialise_weights is None:
         def initialise_weights(x, y): return np.zeros((x, y))
 
-    P["W_%s_mean" % name] = 0.1 * initialise_weights(input_size, output_size)
-    P["b_%s_mean" % name] = np.zeros((output_size,))
-    P["W_%s_std" % name] = 0 * initialise_weights(input_size, output_size)
-    P["b_%s_std" % name] = np.zeros((output_size,)) + np.log(np.exp(1) - 1)
+    if not initialise_weights:
+        print name, "initialised to unit gaussian."
+        P["W_%s_mean" % name] = np.zeros((input_size, output_size))
+        P["b_%s_mean" % name] = np.zeros((output_size,))
+        P["W_%s_std" % name] = np.zeros((input_size, output_size))
+        P["b_%s_std" % name] = np.zeros((output_size,)) + np.log(np.exp(1) - 1)
+    else:
+        P["W_%s_mean" % name] = initialise_weights(input_size, output_size)
+        P["b_%s_mean" % name] = np.zeros((output_size,))
+        P["W_%s_std" % name] = 0.01 * initialise_weights(input_size, output_size)
+        P["b_%s_std" % name] = np.zeros((output_size,)) + np.log(np.exp(1) - 1)
 
     def output(X, samples=-1):
         mean = T.dot(X, P["W_%s_mean" % name]) + P["b_%s_mean" % name]

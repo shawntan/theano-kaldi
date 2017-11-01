@@ -5,6 +5,7 @@ import feedforward
 from theano_toolkit import utils as U
 import vae
 
+
 activation_map = {
     "softplus": T.nnet.softplus,
     "sigmoid": T.nnet.sigmoid,
@@ -71,47 +72,56 @@ def build_speaker_inferer(P, input_dimension, layer_size, speaker_latent_size,
         output_size=speaker_latent_size,
         initial_weights=weight_init,
         activation=activation,
-        initialise_outputs=False
+        initialise_outputs=weight_init
     )
 
     def speaker_encode(X, mask):
-        mask = mask.dimshuffle(0, 1, 'x')
+        mask = mask[:, :, None]
         hidden = input_transform(X)
-        features = T.dot(hidden, P.W_speaker_encoder_pool) +\
-            P.b_speaker_encoder_pool
+        features = (T.dot(hidden, P.W_speaker_encoder_pool) +
+                    P.b_speaker_encoder_pool)
         pooled = T.max(T.switch(mask, features, -np.inf), axis=1)
         return output([pooled])
-
     return speaker_encode
 
+if False:
+    def build_conv_transform(P, name, input_size, output_size, context=5):
+        P['W_%s_conv' % name] = weight_init(input_size, output_size)
+        P['b_%s_conv' % name] = np.zeros((output_size,))
+        W = P['W_%s_conv' % name]
+        b = P['b_%s_conv' % name]
 
-def build_conv_transform(P, name, input_size, output_size, context=5):
-    W_val = weight_init(
-        input_size * (2 * context + 1),
-        output_size
-    ).reshape((output_size, input_size, 1, 2 * context + 1))
-    print W_val.shape
-    P['W_%s_input_conv' % name] = W_val
-    P['b_%s_input_conv' % name] = np.zeros((output_size,))
-    W = P.W_input_conv
-    b = P.b_input_conv.dimshuffle('x', 0, 'x', 'x')
+        def conv(x, mask):
+            output = activation(T.dot(x, W) + b)
+            output = T.switch(mask[:, :, None], output, 0)
+            return output
+        return conv
+else:
+    def build_conv_transform(P, name, input_size, output_size, context=5):
+        W_val = weight_init(
+            input_size * (2 * context + 1),
+            output_size
+        ).reshape((output_size, input_size, 1, 2 * context + 1))
+        P['W_%s_conv' % name] = W_val
+        P['b_%s_conv' % name] = np.zeros((output_size,))
+        W = P['W_%s_conv' % name]
+        b = P['b_%s_conv' % name].dimshuffle('x', 0, 'x', 'x')
 
-    def conv(x, mask):
-        # batch_size x sequence_length x hidden_size
-        mask = mask[:, :, None]
-        x = T.switch(mask, x, 0)
-        x = x.dimshuffle(0, 2, 1)
-        x = x.reshape((x.shape[0], x.shape[1], 1, x.shape[2]))
-        # batch_size x hidden_size x 1 x sequence_length
-        conv_out_ = T.nnet.conv2d(
-            x, W,
-            border_mode='half',
-            filter_flip=False) + b
-        output = activation(conv_out_)
-        output = output.dimshuffle(2, 0, 3, 1)[0]
-        output = T.switch(mask, output, 0)
-        return output
-    return conv
+        def conv(x, mask):
+            # batch_size x sequence_length x hidden_size
+            mask = mask[:, :, None]
+            x = T.switch(mask, x, 0)
+            x = x.dimshuffle(0, 2, 'x', 1)
+            # batch_size x hidden_size x 1 x sequence_length
+            conv_out_ = T.nnet.conv2d(
+                x, W,
+                border_mode='half'
+            ) + b
+            output = activation(conv_out_)
+            output = output.dimshuffle(2, 0, 3, 1)[0]
+            output = T.switch(mask, output, 0)
+            return output
+        return conv
 
 
 @input_dimension
@@ -144,15 +154,15 @@ def build_encoder(P, input_dimension, shared_structure, acoustic_structure,
         output_size=acoustic_latent_size,
         initial_weights=weight_init,
         activation=activation,
-        initialise_outputs=False
+        initialise_outputs=weight_init
     )
 
     def speaker_encode(X, mask):
-        shared_rep = shared_transform(X, mask)[-1]
+        shared_rep = shared_transform(X, mask)
         return shared2speaker(shared_rep, mask)
 
     def acoustic_encode(X, utterance_speaker, mask):
-        shared_rep = shared_transform(X, mask)[-1]
+        shared_rep = shared_transform(X, mask)
         return shared2acoustic([shared_rep, utterance_speaker])
 
     return speaker_encode, acoustic_encode
@@ -171,54 +181,70 @@ def build(P, input_dimension, acoustic_structure, speaker_structure,
 
     speaker_encode, acoustic_encode = build_encoder(P)
 
+    decode = feedforward.build_classifier(
+        P, name="decode",
+        input_sizes=[acoustic_latent_size,
+                     speaker_latent_size],
+        hidden_sizes=decoder_layer_sizes,
+        output_size=decoder_layer_sizes[-1],
+        initial_weights=weight_init,
+        activation=activation,
+        output_activation=activation,
+        output_weights=weight_init,
+    )
+
     decode_conv = build_conv_transform(
         P, name="decoder",
-        input_size=acoustic_latent_size,
-        output_size=decoder_layer_sizes[0],
+        input_size=decoder_layer_sizes[-1],
+        output_size=input_dimension,
         context=5
     )
 
-    decode = vae.build_inferer(
-        P, name="decode",
-        input_sizes=[decoder_layer_sizes[0],
-                     speaker_latent_size],
-        hidden_sizes=decoder_layer_sizes,
+    decoder_output = vae.build_encoder_output(
+        P, name="decoder_output",
+        # input_size=decoder_layer_sizes[-1],
+        input_size=input_dimension,
         output_size=input_dimension,
-        initial_weights=weight_init,
-        activation=activation,
-        initialise_outputs=False
+        initialise_weights=None
     )
 
     def unsupervised_training_cost(X, utt_lengths):
         # X: batch_size, sequence_length, input_size
         # utt_lengths: batch_size
-        mask = T.arange(X.shape[1]).dimshuffle('x', 0) < \
-            utt_lengths.dimshuffle(0, 'x')
+        mask = T.arange(X.shape[1])[None, :] < utt_lengths[:, None]
 
         # Get latent variables
-
-        utterance_speaker,\
-            utterance_speaker_mean,\
-            utterance_speaker_std = speaker_encode(X, mask)
-        utterance_speaker = utterance_speaker_mean.dimshuffle(0, 'x', 1) +\
-            utterance_speaker_std.dimshuffle(0, 'x', 1) *\
-            U.theano_rng.normal(size=(
-                utterance_speaker_std.shape[0],
-                X.shape[1],
-                utterance_speaker_std.shape[1]
-            ))
-
+        (_,
+         utterance_speaker_mean,
+         utterance_speaker_std) = speaker_encode(X, mask)
+        utterance_speaker = (
+            utterance_speaker_mean[:, None, :] + (
+                utterance_speaker_std[:, None, :] *
+                U.theano_rng.normal(size=(
+                    utterance_speaker_std.shape[0],
+                    X.shape[1],
+                    utterance_speaker_std.shape[1]
+                ))
+            )
+        )
         acoustic, acoustic_mean, acoustic_std = acoustic_encode(
-            X, utterance_speaker, mask)
-
+            X, utterance_speaker, mask
+        )
+        acoustic = T.switch(mask[:, :, None], acoustic, 0)
         # Combine distributions for utterance
 
         # Reconstruct
-        acoustic_conv = decode_conv(acoustic, mask)[-1]
-        _, recon_X_mean, recon_X_std = decode([acoustic_conv, utterance_speaker])
+        # _, final_hidden = decode([acoustic, utterance_speaker])
+        _, pre_conv_hidden = decode([acoustic, utterance_speaker])
+        final_hidden = decode_conv(pre_conv_hidden, mask)
+        _, recon_X_mean, recon_X_std = decoder_output(final_hidden)
+        recon_X_mean = T.switch(mask[:, :, None], recon_X_mean, 0)
+        recon_X_std = T.switch(mask[:, :, None], recon_X_std, 1)
 
         acoustic_latent_cost = vae.kl_divergence(
-            acoustic_mean, acoustic_std, 0, 1)  # batch_size, sequence_length
+            acoustic_mean, acoustic_std,
+            0, 1
+        )  # batch_size, sequence_length
         speaker_latent_cost = vae.kl_divergence(
             utterance_speaker_mean, utterance_speaker_std,
             0, 1
@@ -234,29 +260,5 @@ def build(P, input_dimension, acoustic_structure, speaker_structure,
         return batch_speaker_latent_cost,\
             batch_acoustic_latent_cost,\
             batch_reconstruction_cost
-#
-#    def supervised_training_cost(X,spkr_id):
-#        # X: batch_size, sequence_length, input_size
-#
-#        # Get latent variables
-#        utterance_speaker_ = P.speaker_vector[spkr_id]
-#        utterance_speaker = utterance_speaker_.dimshuffle(0,'x',1)
-#        acoustic, acoustic_mean, acoustic_std = acoustic_encode([X,utterance_speaker])
-#
-#        # Combine distributions for utterance
-#
-#        # Reconstruct
-#        _, recon_X_mean, recon_X_std = decode([acoustic,utterance_speaker])
-#
-#        acoustic_latent_cost = vae.kl_divergence(acoustic_mean, acoustic_std, 0, 1) # batch_size, sequence_length
-#        speaker_prior_cost = vae.gaussian_nll(utterance_speaker_, 0, 1)
-#        recon_cost = vae.gaussian_nll(X, recon_X_mean, recon_X_std)
-#
-#        batch_acoustic_latent_cost = T.mean(T.sum(acoustic_latent_cost,axis=1),axis=0)
-#        batch_reconstruction_cost  = T.mean(T.sum(recon_cost,axis=1),axis=0)
-#        batch_speaker_prior_cost   = T.mean(speaker_prior_cost,axis=0)
-#        return batch_speaker_prior_cost,\
-#                batch_acoustic_latent_cost,\
-#                batch_reconstruction_cost
-#
+
     return unsupervised_training_cost
