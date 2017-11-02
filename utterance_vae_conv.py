@@ -97,7 +97,9 @@ if False:
             return output
         return conv
 else:
-    def build_conv_transform(P, name, input_size, output_size, context=5):
+    def build_conv_transform(P, name, input_size, output_size, context=5,
+                             weight_init=weight_init,
+                             activation=activation):
         W_val = weight_init(
             input_size * (2 * context + 1),
             output_size
@@ -196,16 +198,10 @@ def build(P, input_dimension, acoustic_structure, speaker_structure,
     decode_conv = build_conv_transform(
         P, name="decoder",
         input_size=decoder_layer_sizes[-1],
-        output_size=input_dimension,
+        output_size=input_dimension * 2,
+        weight_init=lambda x, y: np.zeros((x, y)),
+        activation=lambda x: x,
         context=5
-    )
-
-    decoder_output = vae.build_encoder_output(
-        P, name="decoder_output",
-        # input_size=decoder_layer_sizes[-1],
-        input_size=input_dimension,
-        output_size=input_dimension,
-        initialise_weights=None
     )
 
     def unsupervised_training_cost(X, utt_lengths):
@@ -234,12 +230,29 @@ def build(P, input_dimension, acoustic_structure, speaker_structure,
         # Combine distributions for utterance
 
         # Reconstruct
-        # _, final_hidden = decode([acoustic, utterance_speaker])
-        _, pre_conv_hidden = decode([acoustic, utterance_speaker])
-        final_hidden = decode_conv(pre_conv_hidden, mask)
-        _, recon_X_mean, recon_X_std = decoder_output(final_hidden)
-        recon_X_mean = T.switch(mask[:, :, None], recon_X_mean, 0)
-        recon_X_std = T.switch(mask[:, :, None], recon_X_std, 1)
+        _, final_hidden = decode([acoustic, utterance_speaker])
+        #_, pre_conv_hidden = decode([acoustic, utterance_speaker])
+        #final_hidden = decode_conv(pre_conv_hidden, mask)
+        #_, recon_X_mean, recon_X_std = decoder_output(final_hidden)
+        #recon_X_mean = T.switch(mask[:, :, None], recon_X_mean, 0)
+        #recon_X_std = T.switch(mask[:, :, None], recon_X_std, 1)
+
+        recon_X_mean_std = decode_conv(final_hidden, mask)
+
+        recon_X_mean = T.switch(
+            mask[:, :, None],
+            recon_X_mean_std[:, :, :input_dimension],
+            0
+        )
+        recon_X_std = T.switch(
+            mask[:, :, None],
+            T.nnet.softplus(
+                recon_X_mean_std[:, :, input_dimension:] +
+                np.log(np.exp(1) - 1)
+            ),
+            1
+        )
+
 
         acoustic_latent_cost = vae.kl_divergence(
             acoustic_mean, acoustic_std,
