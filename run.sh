@@ -35,7 +35,7 @@ nnet-forward $dir/feature_transform ark:- ark:- \
 "
 
 [ -f $dir/pkl/train.00.pklgz ] ||\
-	time $TK_DIR/prepare_pickle.sh $num_jobs \
+    time $TK_DIR/prepare_pickle.sh $num_jobs \
     $datadir \
     $ali \
     $dir/pkl/train \
@@ -43,7 +43,7 @@ nnet-forward $dir/feature_transform ark:- ark:- \
     "$feat_transform" || exit 1;
 
 [ -f $dir/pkl/raw_train.00.pklgz ] ||\
-	time $TK_DIR/prepare_pickle.sh $num_jobs \
+    time $TK_DIR/prepare_pickle.sh $num_jobs \
     $datadir \
     $ali \
     $dir/pkl/raw_train \
@@ -55,11 +55,11 @@ num_pdfs=`gmm-info $ali/final.mdl | grep pdfs | awk '{print $NF}'`
 frame_files=($dir/pkl/train.?*.pklgz)
 label_files=($dir/pkl/train_lbl.?*.pklgz)
 
-input_dim=$(( 11 * $(copy-feats scp:$datadir/feats.scp ark:- | eval $feat_transform | feat-to-dim ark:- -) ))
+input_dim=200
 echo $input_dim $num_pdfs
 
 discriminative_structure="$input_dim:2048:2048:2048:2048:2048:2048:2048:$num_pdfs"
-model_name=nosplice.bn
+model_name=vae_feat.bn
 
 [ -f $dir/discriminative.${model_name}.pkl ] || \
     THEANO_FLAGS=device=cuda python -u $TK_DIR/train.py \

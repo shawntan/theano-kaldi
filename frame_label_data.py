@@ -3,6 +3,47 @@ import data_io
 from itertools import izip, chain
 
 
+vae_transform = None
+def compile_vae():
+    if transform is None:
+        import utterance_vae_conv
+        from theano_toolkit.parameters import Parameters
+        P = Parameters()
+        speaker_encode, acoustic_encode = \
+                utterance_vae_conv.build_encoder(P)
+        X = T.tensor3('X')
+        mask = T.ones_like(X[:, :, 0])
+        (_,
+         utterance_speaker_mean,
+         utterance_speaker_std) = speaker_encode(X, mask)
+        utterance_speaker = (
+            utterance_speaker_mean[:, None, :] + (
+                utterance_speaker_std[:, None, :] *
+                U.theano_rng.normal(size=(
+                    utterance_speaker_std.shape[0],
+                    X.shape[1],
+                    utterance_speaker_std.shape[1]
+                ))
+            )
+        )
+        acoustic, _, _ = acoustic_encode(X, utterance_speaker, mask)
+        vae_transform = theano.function(
+            inputs=[X],
+            outputs=T.concatenate([
+                utterance_speaker,
+                acoustic
+            ], axis=2)[0]
+        )
+    return vae_transform
+
+
+def encode_utterances(stream):
+    f = compile_vae()
+    for name, frames in stream:
+        features = f(frames)
+        yield name, features
+
+
 @config.option("left_context", "Number of frame contexts to the left.",
                type=config.int, default=5)
 @config.option("right_context", "Number of frame contexts to the right.",
@@ -12,6 +53,7 @@ def create_split_streams(frame_files, label_files,
     streams = []
     for frame_file, label_file in izip(frame_files, label_files):
         frame_stream = data_io.stream_file(frame_file)
+        frame_stream = encode_utterances(frame_stream)
         frame_stream = data_io.context(frame_stream,
                                        left=left_context, right=right_context)
         label_stream = data_io.stream_file(label_file)
