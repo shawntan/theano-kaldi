@@ -4,7 +4,8 @@ from itertools import izip, chain
 
 
 vae_transform = None
-def compile_vae():
+@config.option("vae_file", "VAE file.")
+def compile_vae(vae_file):
     if transform is None:
         import utterance_vae_conv
         from theano_toolkit.parameters import Parameters
@@ -34,6 +35,7 @@ def compile_vae():
                 acoustic
             ], axis=2)[0]
         )
+        P.load(vae_file)
     return vae_transform
 
 
